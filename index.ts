@@ -52,7 +52,6 @@ import { registerAskUserQuestion, showQuestionDialog } from "./ask/index";
 import { approvalTitleFor } from "./packages/core/ask/types";
 import { shouldTruncate, truncationPathFor, buildTruncatedPreview, truncationThresholdFor } from "./packages/core/truncation/index";
 import { registerTodoList, registerTodoReminders, bindTodoSession, clearTodoSession, restoreTodos, rt, persist, refreshWidget, togglePanel, syncTodoAutoClearTimer } from "./todo/index";
-import { registerFetchUrl } from "./webfetch/index";
 import { phasesToMarkdown, markdownToPhases, applyOp, TodoPhase, TodoItem } from "./packages/core/todo/types";
 import { loadPlugins, injectPluginSessionStart, registerPluginCommand, getPluginSkillFiles } from "./plugin/index";
 import { listDiscoverableSkillFiles } from "./packages/core/skills";
@@ -576,7 +575,6 @@ export default function (pi: ExtensionAPI) {
   registerAskUserQuestion(pi);
   registerTodoList(pi);
   registerTodoReminders(pi);
-  registerFetchUrl(pi);
   registerAgentFileTools(pi);
   registerPluginCommand(pi);
   try { loadPlugins(pi, null); } catch (e:any) { /* ok */ }
