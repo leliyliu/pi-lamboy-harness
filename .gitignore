@@ -5,3 +5,6 @@ node_modules/
 dist/
 .DS_Store
 Thumbs.db
+
+# local worktrees (superpowers SDD)
+.worktrees/
