@@ -9,9 +9,6 @@ const {
   optionWindow,
   bodyLines,
   questionUniquenessError,
-  backgroundQuestionTaskId,
-  questionTaskDescription,
-  backgroundStartText,
   decideLayout,
   hasAnyPreview,
   MAX_DIGIT_OPTIONS,
@@ -223,23 +220,7 @@ check("questionUniquenessError reports the label", (() => {
   return err !== null && err.includes('"d"');
 })());
 
-// 14. background-mode helpers (pure part; adapter flow needs pi runtime)
-check("task id has ask- prefix", /^ask-[a-z0-9]+-[a-z0-9]+$/.test(backgroundQuestionTaskId()));
-check("task id embeds the timestamp", backgroundQuestionTaskId(0, "zzzz") === "ask-0-zzzz");
-check("description single question", questionTaskDescription(normalizeQuestions({ question: "Deploy now?", options: ["y", "n"] })) === "Deploy now?");
-check("description multi question counts rest",
-  questionTaskDescription(normalizeQuestions({ questions: [
-    { question: "First?", options: ["a", "b"] },
-    { question: "Second?", options: ["a", "b"] },
-    { question: "Third?", options: ["a", "b"] },
-  ] })) === "First? (+2 more)");
-check("start text carries task_id + status", (() => {
-  const t = backgroundStartText("ask-x1-y2", "Deploy now?");
-  return t.includes("task_id: ask-x1-y2") && t.includes("status: running") &&
-    t.includes("description: Deploy now?") && t.includes("task_output");
-})());
-
-// 15. body + custom Other (P3)
+// 14. body + custom Other (P3)
 check("body parsed", normalizeQuestions({ question: "q", options: ["a", "b"], body: "line1\nline2" })[0].body === "line1\nline2");
 check("blank body dropped", normalizeQuestions({ question: "q", options: ["a", "b"], body: "   " })[0].body === undefined);
 check("other_label parsed", normalizeQuestions({ question: "q", options: ["a", "b"], other_label: "自定义" })[0].otherLabel === "自定义");
@@ -263,7 +244,7 @@ check("bodyLines trims surrounding whitespace", (() => {
   return b.lines.length === 1 && b.lines[0] === "hello";
 })());
 
-// 16. option preview parsing (rpiv parity)
+// 15. option preview parsing (rpiv parity)
 check("preview parsed", (() => {
   const q = normalizeQuestions({ question: "q", options: [{ label: "a", preview: "# Plan\n```ts\nx\n```" }, "b"] })[0];
   return q.options[0].preview === "# Plan\n```ts\nx\n```" && q.options[1].preview === undefined;
@@ -272,7 +253,7 @@ check("blank preview dropped",
   normalizeQuestions({ question: "q", options: [{ label: "a", preview: "   " }, "b"] })[0].options[0].preview === undefined);
 check("ask tool enables chat row", normalizeQuestions({ question: "q", options: ["a", "b"] })[0].allowChat === true);
 
-// 17. hasAnyPreview + decideLayout (pure layout decision)
+// 16. hasAnyPreview + decideLayout (pure layout decision)
 check("hasAnyPreview true when any option has preview", (() => {
   const q = normalizeQuestions({ question: "q", options: [{ label: "a", preview: "x" }, "b"] })[0];
   return hasAnyPreview(q) === true;
@@ -284,7 +265,7 @@ check("wide + preview → side-by-side", decideLayout(100, true) === "side-by-si
 check("narrow terminal → stacked degrade", decideLayout(99, true) === "stacked" && decideLayout(80, true) === "stacked");
 check("no preview → stacked even when wide", decideLayout(200, false) === "stacked");
 
-// 18. reserved labels (rpiv reserved_label guard parity)
+// 17. reserved labels (rpiv reserved_label guard parity)
 check("CHAT_LABEL / SUBMIT_LABEL constants", CHAT_LABEL === "Chat about this" && SUBMIT_LABEL === "Submit");
 check("RESERVED_LABELS covers Other/Chat/Submit",
   RESERVED_LABELS.includes("Other") && RESERVED_LABELS.includes("Chat about this") && RESERVED_LABELS.includes("Submit"));
@@ -311,7 +292,7 @@ check("reserved short-circuits before duplicate", (() => {
 check("lowercase other is an ordinary label",
   normalizeQuestions({ question: "q", options: ["other", "b"] })[0].options[0].label === "other");
 
-// 19. Chat row state machine
+// 18. Chat row state machine
 const c1 = new AnswerState(normalizeQuestions({ question: "Pick", options: ["A", "B"] })[0]);
 check("permission shape has no chat row", (() => {
   const p = new AnswerState({ question: "Allow?", options: [{ label: "yes" }, { label: "no" }] });
@@ -326,7 +307,7 @@ check("chat without allowChat → noop", (() => {
 })());
 check("multi Space on chat row → noop", m1.toggle(m1.chatIndex) === "noop");
 
-// 20. per-option notes (n key on preview-bearing options)
+// 19. per-option notes (n key on preview-bearing options)
 const n1 = new AnswerState(normalizeQuestions({
   question: "q",
   options: [{ label: "a", preview: "preview A" }, { label: "b" }, { label: "c", preview: "preview C" }],
@@ -348,7 +329,7 @@ check("cancelNoteEdit keeps stored notes", (() => {
   return n1.editingNote === false && n1.noteTarget === -1 && n1.notes.get(2) === "prefer this";
 })());
 
-// 21. formatAnswers — kind chat + notes lines
+// 20. formatAnswers — kind chat + notes lines
 check("chat kind without answer", (() => {
   const t = formatAnswers([{ question: "Q", kind: "chat", status: "skipped" }]);
   return t.includes("A: (no answer — user wants to chat about this question)");

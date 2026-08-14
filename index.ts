@@ -45,8 +45,6 @@ import type { PersistencePort } from "./packages/core/ports";
 import { planManager } from "./packages/core/plan";
 import { permissionManager, approvalViaRpcUi } from "./packages/core/permission";
 import { registerPermissionCommands } from "./packages/core/permission/commands";
-import { backgroundManager, registerBackgroundTools } from "./task";
-import { cronManager, registerCronTools } from "./packages/core/task/cron";
 import { registerAskUserQuestion, showQuestionDialog } from "./ask/index";
 import { approvalTitleFor } from "./packages/core/ask/types";
 import { shouldTruncate, truncationPathFor, buildTruncatedPreview, truncationThresholdFor } from "./packages/core/truncation/index";
@@ -55,7 +53,6 @@ import { phasesToMarkdown, markdownToPhases, applyOp, TodoPhase, TodoItem } from
 import { registerTui, setTuiBadgeProvider } from "./tui/index";
 import { agentPauseGate } from "./packages/core/pause/gate";
 import { registerPauseCommands } from "./pause/commands";
-import { setBackgroundSessionDir } from "./task";
 import shared from "./state";
 
 // Session dir captured at session_start — transcript wire.jsonl 落盘根目录.
@@ -97,83 +94,13 @@ function summarizeStateForUpdate(state: SwarmState): any {
   };
 }
 
-// ============================================================
-// Background swarm runner — fire-and-forget execution wired to the
-// background task manager (task_list / task_output / task_stop).
-// ============================================================
-async function runSwarmInBackground(
-  bgId: string,
-  state: SwarmState,
-  tasks: SubAgentTask[],
-  ctx: any,
-  maxC: number,
-  outputPath?: string,
-): Promise<void> {
-  const controller = new AbortController();
-  // task_stop flips the entry status to "aborted"; poll and translate that
-  // into an abort so in-flight subagents and the worker pool wind down.
-  const stopPoll = setInterval(() => {
-    const t = backgroundManager.get(bgId);
-    if (!t || t.status !== "running") {
-      try { controller.abort(); } catch { /* ignore */ }
-    }
-  }, 500);
-  try {
-    await runProgressive(tasks, maxC, async (task) => {
-      if (controller.signal.aborted) {
-        task.status = "aborted";
-        return;
-      }
-      await runSubAgent(task, ctx, controller.signal, () => {
-        const d = tasks.filter((t) => t.status === "done").length;
-        backgroundManager.appendOutput(bgId, [`progress: ${d}/${tasks.length} done`]);
-      }, );
-    });
-
-    // stop() already flipped the entry to "aborted" — leave it as-is.
-    if (controller.signal.aborted) return;
-
-    state.endTime = Date.now();
-    state.status = tasks.every((t) => t.status === "done")
-      ? "completed"
-      : tasks.some((t) => t.status === "done")
-        ? "partial"
-        : "failed";
-
-    const report = formatReport(state);
-    if (outputPath) {
-      // Kimi Code-style: full report lands in output_path; the task entry
-      // keeps only a pointer + tail so in-memory outputLines stay small.
-      try {
-        fs.mkdirSync(path.dirname(path.resolve(outputPath)), { recursive: true });
-        fs.writeFileSync(outputPath, report, "utf-8");
-        backgroundManager.complete(bgId, [
-          `[report written to ${outputPath} — use Read with offset/limit to page]`,
-          ...report.split("\n").slice(-5),
-        ]);
-      } catch (e: any) {
-        backgroundManager.complete(bgId, [`[failed to write output_path ${outputPath}: ${e?.message || e}]`, report]);
-      }
-    } else {
-      backgroundManager.complete(bgId, report.split("\n"));
-    }
-  } catch (e: any) {
-    backgroundManager.fail(bgId, e?.message || String(e));
-  } finally {
-    clearInterval(stopPoll);
-    if (swarmState.currentSwarm === state) setCurrentSwarm(null);
-    // Clear profile-level tool policy after background swarm completes
-    try { toolPolicyService.clearProfilePolicy(); } catch { /* ok */ }
-  }
-}
-
 const GOAL_ENTRY_TYPE = "muselinn_goal";
 
 export default function (pi: ExtensionAPI) {
   // ── Goal persistence: save on every change ──
   // Note: pi/ctx go stale after session replacement (newSession/fork/reload
   // or process teardown in pi -p). Persistence callbacks may fire from
-  // timers/background completions after that, so guard every appendEntry.
+  // timers after that, so guard every appendEntry.
   // Reads always resolve through the freshest ctx we've seen.
   let latestCtx: any = null;
   const persistencePort: PersistencePort = {
@@ -242,19 +169,13 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // ── Background task manager binding ──
-  backgroundManager.bind(
-    (type, data) => { try { pi.appendEntry(type, data); } catch { /* stale ctx */ } },
-    (msg, type) => { /* notifications handled via appendEntry */ },
-  );
-
   // ── session_start: restore goal + plan from persisted entries + set status bar ──
   pi.on("session_start", async (_event, ctx) => {
     latestCtx = ctx;
     // Set plan session directory (for plan file storage)
     try { planManager.setSessionDir(ctx.sessionManager.getSessionDir()); } catch { /* ok */ }
-    // Capture session dir for subagent transcript 落盘 (swarm + background)
-    try { mainSessionDir = ctx.sessionManager.getSessionDir(); setBackgroundSessionDir(mainSessionDir); } catch { /* fallback tmp */ }
+    // Capture session dir for subagent transcript 落盘
+    try { mainSessionDir = ctx.sessionManager.getSessionDir(); } catch { /* fallback tmp */ }
 
     // Refresh model catalog once at startup (Pi 0.80.8 async refresh).
     // Fire-and-forget: this handler runs inside init()'s awaited session_start
@@ -323,12 +244,6 @@ export default function (pi: ExtensionAPI) {
       ? ctx.ui.theme.fg("accent", `[${agentCount} agents running]`)
       : undefined
     );
-    // Running background tasks count (Kimi Code-style: [2 tasks running])
-    const runningTasks = backgroundManager.list().filter(t => t.status === "running").length;
-    ctx.ui.setStatus("task-count", runningTasks > 0
-      ? ctx.ui.theme.fg("accent", `[${runningTasks} tasks running]`)
-      : undefined
-    );
 
     // Agent lifecycle badge (Kimi Code-style: [3 agents running])
     const lifecycleCount = agentLifecycle.getActiveCount();
@@ -347,18 +262,6 @@ export default function (pi: ExtensionAPI) {
     try {
       refreshWidget();
     } catch { /* ok */ }
-
-    // Restore background tasks from persisted entries. Pass the raw entry
-    // list: restore() understands both the legacy full-array entry type and
-    // the incremental per-task entry type (later entries win per task id).
-    try {
-      backgroundManager.restore(ctx.sessionManager.getEntries());
-    } catch { /* not critical */ }
-
-    // Restore cron tasks from persisted entries (cronManager scans for its own entry type)
-    try {
-      cronManager.restore(ctx.sessionManager.getEntries());
-    } catch { /* not critical */ }
 
     // Restore permission mode from persisted entries
     try {
@@ -439,13 +342,6 @@ export default function (pi: ExtensionAPI) {
     const agentCount = swarmState.activeSessions?.size ?? 0;
     ctx.ui.setStatus("agent-count", agentCount > 0
       ? ctx.ui.theme.fg("accent", `[${agentCount} agents running]`)
-      : undefined
-    );
-    
-    // Running background tasks count (Kimi Code-style)
-    const runningTasks = backgroundManager.list().filter(t => t.status === "running").length;
-    ctx.ui.setStatus("task-count", runningTasks > 0
-      ? ctx.ui.theme.fg("accent", `[${runningTasks} tasks running]`)
       : undefined
     );
 
@@ -566,16 +462,9 @@ export default function (pi: ExtensionAPI) {
 
     // Plan mode restrictions (checked first, before policy chain)
     if (planManager.shouldBlockTool(toolName, filePath, bashCommand)) {
-      // Kimi Code-aligned per-tool deny messages (plan-mode-guard-deny.ts parity).
-      let reason: string;
-      if (toolName === "task_stop") {
-        reason = "TaskStop is not available in plan mode. Call exit_plan_mode to exit plan mode before stopping a background task.";
-      } else if (toolName === "cron_create" || toolName === "cron_delete") {
-        reason = `${toolName} is not available in plan mode because it would mutate scheduled work that runs after plan exit. Call exit_plan_mode first.`;
-      } else {
-        const planFilePath = planManager.getPlanFilePath();
-        reason = `Plan mode is active. You may only write to the current plan file: ${planFilePath || "(no plan file selected yet)"}. Call exit_plan_mode to exit plan mode before editing other files.`;
-      }
+      // Kimi Code-aligned per-tool deny message (plan-mode-guard-deny.ts parity).
+      const planFilePath = planManager.getPlanFilePath();
+      const reason = `Plan mode is active. You may only write to the current plan file: ${planFilePath || "(no plan file selected yet)"}. Call exit_plan_mode to exit plan mode before editing other files.`;
       ctx.ui.notify(reason, "warning");
       return { block: true, reason: `Plan Mode: ${reason}` };
     }
@@ -601,12 +490,6 @@ export default function (pi: ExtensionAPI) {
       return result;
     }
   });
-
-  // ── Background Task Tools ──
-  registerBackgroundTools(pi);
-
-  // ── Cron Tools (scheduled prompts) ──
-  registerCronTools(pi);
 
   // ============================================================
   // Shared: Task-aware model resolution
@@ -765,18 +648,6 @@ export default function (pi: ExtensionAPI) {
         ),
       ),
       max_concurrency: Type.Optional(Type.Number({ default: 5 })),
-      run_in_background: Type.Optional(
-        Type.Boolean({
-          default: false,
-          description:
-            "Run the swarm as a background task and return a task ID immediately. Results are collected via task_list/task_output; final report optionally lands in output_path.",
-        }),
-      ),
-      output_path: Type.Optional(
-        Type.String({
-          description: "Only with run_in_background: write the final swarm report to this file (page through it with Read offset/limit).",
-        }),
-      ),
     }),
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
@@ -789,7 +660,6 @@ export default function (pi: ExtensionAPI) {
 
       const tier: ModelTier = params.model_tier || "auto";
       const maxC = Math.min(params.max_concurrency || 5, 128);
-      const runInBackground = params.run_in_background === true;
       const defaultModelId = getDefaultModel();
       const defaultProvider = getDefaultProvider();
 
@@ -967,39 +837,6 @@ export default function (pi: ExtensionAPI) {
       if (swarmState.cancelTimer) {
         clearTimeout(swarmState.cancelTimer);
         setCancelTimer(null);
-      }
-
-      // ── Background mode: hand off to the background task manager ──
-      if (runInBackground) {
-        const bgId = `bg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-        backgroundManager.register({
-          id: bgId,
-          prompt: `[swarm] ${params.description} (${tasks.length} agents)`,
-          model: modelId,
-          subagentType: params.subagent_type || "coder",
-          status: "running",
-          outputLines: [],
-          startTime: Date.now(),
-          createdAt: Date.now(),
-          turns: 0,
-          usage: { input: 0, output: 0, cost: 0 },
-        });
-        const outputPath = params.output_path as string | undefined;
-        state.status = "running";
-        // Fire-and-forget: progress lands in the task entry, the final
-        // report in the entry (and optionally in output_path).
-        void runSwarmInBackground(bgId, state, tasks, ctx, maxC, outputPath);
-        return {
-          content: [{
-            type: "text",
-            text:
-              `Swarm started in background. Task ID: ${bgId}\n` +
-              `${tasks.length} agents queued (max_concurrency=${maxC}, 30min/agent timeout).\n` +
-              `Use task_list to check status, task_output(task_id="${bgId}", block=true) to wait for completion.` +
-              (outputPath ? `\nFinal report will be written to: ${outputPath}` : ""),
-          }],
-          details: null,
-        };
       }
 
       // Setup parent abort controller for cancel propagation

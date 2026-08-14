@@ -186,8 +186,6 @@ export function approvalTitleFor(toolName: string): string {
     case "ls": return "List this directory?";
     case "ask_user_question": return "Ask the user?";
     case "todo_list": return "Update the todo list?";
-    case "cron_create": return "Schedule this cron task?";
-    case "cron_delete": return "Delete this cron task?";
     default: return `Run ${toolName}?`;
   }
 }
@@ -544,39 +542,4 @@ export function formatAnswers(answered: AnsweredQuestion[]): string {
     return body;
   });
   return lines.join("\n\n");
-}
-
-/**
- * Task id for a background question (ask- prefix to keep question tasks
- * distinguishable from bg- subagent tasks in task_list).
- */
-export function backgroundQuestionTaskId(
-  now: number = Date.now(),
-  rand: string = Math.random().toString(36).slice(2, 6),
-): string {
-  return `ask-${now.toString(36)}-${rand}`;
-}
-
-/** Short one-line description for the background task entry. */
-export function questionTaskDescription(specs: QuestionSpec[]): string {
-  const first = specs[0]?.question.trim() ?? "";
-  const label = first === "" ? "Ask user question" : first;
-  return specs.length <= 1 ? label : `${label} (+${specs.length - 1} more)`;
-}
-
-/**
- * Immediate tool-result text for background mode (kimi-code ask-user
- * parity: return at once with the task_id; the answer is persisted via
- * appendEntry + a completion notification when the user responds).
- */
-export function backgroundStartText(taskId: string, description: string): string {
-  return (
-    `task_id: ${taskId}\n` +
-    `description: ${description}\n` +
-    "status: running\n" +
-    "automatic_notification: true\n" +
-    "next_step: Continue your current work; the answer is persisted and you are notified when the user responds.\n" +
-    "next_step: Use task_output with this task_id for a non-blocking status/answer snapshot (block=true to wait for it).\n" +
-    "next_step: Use task_stop only if the question should be cancelled."
-  );
 }

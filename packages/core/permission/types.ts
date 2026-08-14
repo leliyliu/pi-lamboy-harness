@@ -37,8 +37,6 @@ export const READ_ONLY_TOOLS = new Set([
   'read', 'grep', 'glob', 'find', 'ls',
   'get_goal', 'web_search', 'fetch_content',
   'read_media_file', 'read_media',
-  'task_list', 'task_output',
-  'cron_list',
   'todo_list',
   'enter_plan_mode', 'exit_plan_mode',
   'skill',

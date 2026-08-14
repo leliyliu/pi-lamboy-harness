@@ -363,8 +363,6 @@ export class PlanManager {
    * Kimi Code's approach:
    * - Bash is NOT blocked — it follows the normal permission mode (auto/yolo/manual).
    * - Write/Edit: blocked unless targeting the active plan file.
-   * - TaskStop: blocked (would abort background work during planning).
-   * - CronCreate/CronDelete: blocked (would mutate scheduled work).
    * - Everything else: allowed (passes through to the permission policy chain).
    *
    * The plan file path is matched by:
@@ -375,11 +373,6 @@ export class PlanManager {
   shouldBlockTool(toolName: string, filePath?: string, _command?: string): boolean {
     if (!planModeState.isActive) return false;
 
-    // Kimi Code-style: block task/cron mutations during plan mode
-    if (toolName === 'task_stop' || toolName === 'cron_create' || toolName === 'cron_delete') {
-      return true;
-    }
-
     // Write/Edit: only the plan file is writable
     if (toolName === 'write' || toolName === 'edit') {
       if (!filePath) return true; // no path → block
@@ -389,7 +382,7 @@ export class PlanManager {
     // Bash is NOT blocked — follows normal permission mode (auto/yolo/manual),
     // matching Kimi Code's "Bash follows the normal permission mode and rules".
     // Everything else (ask_user_question, read, grep, find, glob,
-    // web_search, fetch_content, agent_file_*, todo_list, etc.) is allowed.
+    // web_search, fetch_content, todo_list, etc.) is allowed.
     return false;
   }
 

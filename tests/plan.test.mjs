@@ -107,10 +107,6 @@ planManager.enterPlanMode("kimi code permission model");
 check("bash ls is allowed", planManager.shouldBlockTool("bash", "", "ls /tmp") === false);
 check("bash rm is allowed (goes to permission mode)", planManager.shouldBlockTool("bash", "", "rm -rf x") === false);
 check("bash git status is allowed", planManager.shouldBlockTool("bash", "", "git status") === false);
-check("plan mode blocks task_stop", planManager.shouldBlockTool("task_stop") === true);
-check("plan mode blocks cron_create", planManager.shouldBlockTool("cron_create") === true);
-check("plan mode blocks cron_delete", planManager.shouldBlockTool("cron_delete") === true);
-check("plan mode allows cron_list", planManager.shouldBlockTool("cron_list") === false);
 check("plan mode blocks write to non-plan file", planManager.shouldBlockTool("write", "/tmp/foo.txt") === true);
 // Write to the active plan file is allowed (exact path match)
 const currentPlan = planManager.getCurrentPlan();

@@ -12,32 +12,22 @@
 // markdown `preview` (side-by-side preview pane; `n` attaches a
 // per-option note that travels back in answers[].notes). The tool
 // result also carries a structured `details` envelope (cancelled /
-// chat / answers[].kind/notes) for machine consumers. With
-// background: true the question is registered on the shared
-// backgroundManager and the tool returns its task_id immediately —
-// the answer lands via appendEntry + a completion notification when
-// the user responds. In print/RPC mode (no UI) the tool returns the
-// questions as text for the user to answer in the next message.
-// Permission approval reuses showQuestionDialog (single-select, no
-// Other, no previews, no Chat — see index.ts), so its dialog is
-// unchanged.
+// chat / answers[].kind/notes) for machine consumers. In print/RPC
+// mode (no UI) the tool returns the questions as text for the user to
+// answer in the next message.
 // ============================================================
 
 import {
-  backgroundQuestionTaskId,
-  backgroundStartText,
   CHAT_LABEL,
   normalizeQuestions,
   formatAnswers,
   OTHER_LABEL,
-  questionTaskDescription,
   type AnswerKind,
   type AnswerState,
   type AnsweredQuestion,
   type QuestionSpec,
 } from "../packages/core/ask/types";
 import { QuestionDialogComponent, type QuestionsDialogResult } from "./dialog";
-import { backgroundManager } from "../task/index";
 
 /** Run the tabbed dialog over all questions; undefined = no UI available. */
 export async function showQuestionsDialog(
@@ -132,55 +122,6 @@ function answersEnvelope(
   };
 }
 
-/**
- * Background mode (kimi-code ask-user.ts parity): register a task on the
- * shared backgroundManager, return its task_id immediately, and let the
- * dialog run without blocking the main loop. When the user answers, the
- * formatted answers land via backgroundManager.complete → appendEntry
- * persistence + completion notification; task_output(task_id) reads them.
- */
-function startBackgroundQuestion(ctx: any, questions: QuestionSpec[]) {
-  const taskId = backgroundQuestionTaskId();
-  const description = questionTaskDescription(questions);
-  try {
-    backgroundManager.register({
-      id: taskId,
-      prompt: `Question: ${description}`,
-      model: "(question)",
-      subagentType: "question",
-      status: "running",
-      outputLines: [],
-      startTime: Date.now(),
-      createdAt: Date.now(),
-      turns: 0,
-      usage: { input: 0, output: 0, cost: 0 },
-    });
-  } catch (err: any) {
-    return { content: [{ type: "text", text: err?.message ?? String(err) }] };
-  }
-
-  // Fire-and-forget: do NOT await — the point is to not block the main loop.
-  void (async () => {
-    try {
-      const result = await showQuestionsDialog(ctx, questions);
-      // A task_stop while the dialog was open wins: don't resurrect it.
-      if (backgroundManager.get(taskId)?.status !== "running") return;
-      if (!result) {
-        backgroundManager.fail(taskId, "Interactive dialog unavailable; ask the user directly in text instead.");
-        return;
-      }
-      const suffix = result.cancelled ? "\n\n(user cancelled the dialog)" : "";
-      backgroundManager.complete(taskId, (formatAnswers(collectAnswers(questions, result)) + suffix).split("\n"));
-    } catch (err: any) {
-      if (backgroundManager.get(taskId)?.status === "running") {
-        backgroundManager.fail(taskId, err?.message ?? String(err));
-      }
-    }
-  })();
-
-  return { content: [{ type: "text", text: backgroundStartText(taskId, description) }] };
-}
-
 export function registerAskUserQuestion(pi: any): void {
   pi.registerTool({
     name: "ask_user_question",
@@ -194,7 +135,6 @@ export function registerAskUserQuestion(pi: any): void {
       "Set multi_select: true when several options may apply at once; a free-text Other option is always added automatically",
       "Question texts must be unique per call and option labels unique within a question — duplicates are rejected; labels Other, Chat about this and Submit are reserved",
       "The user may pick Chat about this instead of answering: the answer comes back with kind chat — discuss the question with the user rather than treating it as answered",
-      "Set background: true when you can keep working without the answer: returns a task_id immediately and the answer arrives as a background task result — do not poll while it is pending",
       "For purely open-ended input, ask directly in your reply text instead",
     ],
     parameters: {
@@ -206,7 +146,6 @@ export function registerAskUserQuestion(pi: any): void {
         body: { type: "string", description: "Optional long-form context shown under the question (first 12 lines rendered)" },
         other_label: { type: "string", description: "Custom label for the free-text Other option (default \"Other\")" },
         other_description: { type: "string", description: "Custom description line for the Other option" },
-        background: { type: "boolean", description: "Ask without blocking: returns a task_id immediately; the answer is persisted + notified when the user responds" },
         options: {
           type: "array",
           description: "Options for the single question (2-9 items; strings or {label, description?, preview?} — preview is markdown rendered next to the option list)",
@@ -227,10 +166,6 @@ export function registerAskUserQuestion(pi: any): void {
         questions = normalizeQuestions(params);
       } catch (err: any) {
         return { content: [{ type: "text", text: err?.message ?? String(err) }] };
-      }
-
-      if (params?.background === true) {
-        return startBackgroundQuestion(ctx, questions);
       }
 
       if (!ctx?.hasUI) {

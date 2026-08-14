@@ -4,22 +4,18 @@
 // /pause freezes the main agent (tool_call gate) and every swarm
 // subagent at their next safe boundary until the overlay is
 // released. /steer injects a message into a running subagent's
-// steering queue (swarm sessions or background tasks) — the agent
-// loop drains it after the current tool call completes.
+// steering queue (swarm sessions) — the agent loop drains it after
+// the current tool call completes.
 // ============================================================
 
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { swarmState } from "../packages/core/swarm/types";
-import { backgroundManager } from "../task/index";
 import { runPauseScreen } from "./screen";
 
-/** All currently steerable task ids: swarm sessions + running background tasks. */
+/** All currently steerable task ids: swarm sessions. */
 function runningTaskIds(): string[] {
-  return [
-    ...(swarmState.activeSessions?.keys() ?? []),
-    ...backgroundManager.listRunning().map((t) => t.id),
-  ];
+  return [...(swarmState.activeSessions?.keys() ?? [])];
 }
 
 export function registerPauseCommands(pi: ExtensionAPI): void {
@@ -60,13 +56,7 @@ export function registerPauseCommands(pi: ExtensionAPI): void {
         return;
       }
 
-      // Background tasks.
-      const bg = backgroundManager.steer(taskId, message);
-      if (bg.ok) {
-        try { ctx.ui.notify(`Steered ${taskId}`, "success"); } catch { /* ok */ }
-      } else {
-        try { ctx.ui.notify(`steer failed: ${bg.error}`, "error"); } catch { /* ok */ }
-      }
+      try { ctx.ui.notify(`steer failed: no running task ${taskId}`, "error"); } catch { /* ok */ }
     },
   });
 }
