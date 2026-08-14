@@ -1,6 +1,16 @@
 # Changelog
 
-All notable changes to pi-muselinn-harness, in reverse chronological order.
+All notable changes to pi-lamboy-harness, in reverse chronological order.
+
+## 0.10.0 (2026-02-11)
+
+Personal fork of pi-muselinn-harness 0.9.22. Breaking reduction per plans/personal-harness-roadmap.md:
+
+- Removed: Swarm, Task/Cron, Webfetch, Skills scanner, Hooks engine, Plugin bundles, agent-file (superseded by pi-subagents / pi-web-access / pi native skills+packages)
+- Removed: Kimi Code compat layer shipped with those modules
+- Migrated: spinner primitives from core/swarm to core/tui
+- Kept: Goal, Plan, Permission guards, Ask (foreground), Todo, Pause, TUI, Truncation
+- Docs: README (en/zh-CN) pruned to post-reduction reality; Kimi references swept (phase-1 scope)
 
 ## 0.9.22
 

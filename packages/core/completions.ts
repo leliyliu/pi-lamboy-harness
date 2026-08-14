@@ -131,7 +131,7 @@ const TUI_SHIMMER_MODES: CompletionItem[] = [
 
 const TUI_STYLES: CompletionItem[] = [
   { value: "plain", label: "plain", description: "Pi default borders" },
-  { value: "boxed", label: "boxed", description: "Kimi-style closed box (╭╮│╰╯)" },
+  { value: "boxed", label: "boxed", description: "Closed box (╭╮│╰╯)" },
   { value: "compact", label: "compact", description: "pi-spark-style info top border" },
 ];
 

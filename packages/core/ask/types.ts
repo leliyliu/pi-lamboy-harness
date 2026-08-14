@@ -144,7 +144,7 @@ export interface OptionWindow {
 
 /**
  * Visible option window over [0, total) that keeps `cursor` in view
- * (kimi-code question-dialog parity: maxVisibleOptions = 6, cursor
+ * (question-dialog parity: maxVisibleOptions = 6, cursor
  * centered when possible, clamped at both ends). Small terminals never
  * overflow because at most maxVisible option rows are rendered.
  */
@@ -173,7 +173,7 @@ export function bodyLines(body: string | undefined, maxLines: number = MAX_BODY_
 
 /**
  * Human action title for a tool name on the approval dialog
- * (Kimi approval-panel parity: "Run this command?" / "Apply these edits?").
+ * (approval-panel parity: "Run this command?" / "Apply these edits?").
  */
 export function approvalTitleFor(toolName: string): string {
   switch (toolName) {
@@ -208,7 +208,7 @@ export const RESERVED_LABEL_MESSAGE =
 
 /**
  * Answers are keyed by question text with option labels as values, so
- * both must be unambiguous (kimi-code ask-user.ts parity): question
+ * both must be unambiguous (ask-user parity): question
  * texts unique across the call, option labels unique within their
  * question. Reserved labels (Other / Chat about this / Submit, plus a
  * custom other_label) are rejected FIRST (rpiv parity: reserved_label

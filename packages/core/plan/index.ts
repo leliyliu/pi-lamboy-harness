@@ -1,5 +1,5 @@
 // ============================================================
-// Plan System — Kimi Code-style Plan Mode
+// Plan System — Plan Mode
 // ============================================================
 
 import type { PlanData, PlanStatus, PlanModeState } from "./types.ts";
@@ -17,10 +17,10 @@ function generatePlanId(): string {
 }
 
 // ============================================================
-// Plan Mode — Kimi Code-style permission model
+// Plan Mode — permission model
 // ------------------------------------------------------------
 // Plan mode does NOT block bash. Bash follows the normal permission
-// mode (auto/yolo/manual) — the same as Kimi Code.
+// mode (auto/yolo/manual).
 // Only the following are blocked during plan mode:
 //   - Write/Edit to files OUTSIDE the plan file (plan file is allowed)
 //   - TaskStop (would abort running background work during planning)
@@ -70,7 +70,7 @@ export class PlanManager {
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
   /**
-   * Generate Kimi Code-style hero slug (e.g., "psylocke-kamala-khan-falcon").
+   * Generate hero slug (e.g., "psylocke-kamala-khan-falcon").
    */
   private generateHeroSlug(): string {
     const adjectives = ['psylocke', 'wolverine', 'cyclops', 'storm', 'jean', 'beast', 'colossus', 'nightcrawler'];
@@ -82,7 +82,7 @@ export class PlanManager {
     return `${adj}-${noun}-${verb}`;
   }
 
-  /** Ensure plan directory exists (Kimi Code-style) */
+  /** Ensure plan directory exists */
   private ensurePlanDirectory(planPath: string): void {
     try {
       const dir = path.dirname(planPath);
@@ -93,9 +93,9 @@ export class PlanManager {
   }
 
   /**
-   * Enter Plan Mode (Kimi Code-style).
+   * Enter Plan Mode.
    * Called by EnterPlanMode tool or /plan command.
-   * Creates the plan directory immediately (Kimi Code-style: ensurePlanDirectory).
+   * Creates the plan directory immediately (ensurePlanDirectory).
    */
   enterPlanMode(reason?: string): PlanData {
     const heroSlug = this.generateHeroSlug();
@@ -132,7 +132,7 @@ export class PlanManager {
   }
 
   /**
-   * Exit Plan Mode (Kimi Code-style).
+   * Exit Plan Mode.
    * Called by ExitPlanMode tool.
    */
   exitPlanMode(): PlanData | null {
@@ -224,7 +224,7 @@ export class PlanManager {
   }
 
   /**
-   * Clear plan mode (Kimi Code-style /plan clear).
+   * Clear plan mode (/plan clear).
    */
   clearPlan(): void {
     setCurrentPlanMode({
@@ -236,7 +236,7 @@ export class PlanManager {
   }
 
   /**
-   * Clear plan content only (Kimi Code-style /plan clear).
+   * Clear plan content only (/plan clear).
    * Keeps plan mode active, just empties the plan file/content.
    */
   clearPlanContent(): void {
@@ -263,7 +263,7 @@ export class PlanManager {
   }
 
   /**
-   * Toggle plan mode (Kimi Code-style /plan).
+   * Toggle plan mode (/plan).
    */
   togglePlanMode(): boolean {
     if (planModeState.isActive) {
@@ -358,9 +358,9 @@ export class PlanManager {
   // ── Tool Restrictions ──────────────────────────────────────────────────
 
   /**
-   * Check if a tool should be blocked in plan mode (Kimi Code-style).
+   * Check if a tool should be blocked in plan mode.
    *
-   * Kimi Code's approach:
+   * Approach:
    * - Bash is NOT blocked — it follows the normal permission mode (auto/yolo/manual).
    * - Write/Edit: blocked unless targeting the active plan file.
    * - Everything else: allowed (passes through to the permission policy chain).
@@ -380,7 +380,7 @@ export class PlanManager {
     }
 
     // Bash is NOT blocked — follows normal permission mode (auto/yolo/manual),
-    // matching Kimi Code's "Bash follows the normal permission mode and rules".
+    // matching "Bash follows the normal permission mode and rules".
     // Everything else (ask_user_question, read, grep, find, glob,
     // web_search, fetch_content, todo_list, etc.) is allowed.
     return false;
@@ -392,11 +392,11 @@ export class PlanManager {
   private injectionTurnCount = 0;
 
   /**
-   * Build plan mode injection for system prompt (Kimi Code-style).
+   * Build plan mode injection for system prompt.
    * Full variant on first injection or after user message; sparse variant
    * on subsequent assistant turns to avoid repetition.
    *
-   * Wording is aligned with Kimi Code's plan-mode injection
+   * Wording is aligned with plan-mode injection
    * (packages/agent-core/src/agent/injection/plan-mode.ts):
    * - Edits are restricted to the current plan file unless a tool request
    *   is explicitly approved.
@@ -412,7 +412,7 @@ export class PlanManager {
 
     if (sparse) {
       // Sparse reminder: short, just enough to keep the model oriented
-      // (Kimi Code sparseReminder parity).
+      // (sparseReminder parity).
       return [
         `## Plan Mode Active`,
         ``,
@@ -422,7 +422,7 @@ export class PlanManager {
       ].join('\n');
     }
 
-    // Full reminder (Kimi Code fullReminder parity).
+    // Full reminder (fullReminder parity).
     const parts = [
       `## Plan Mode Active`,
       ``,
@@ -475,7 +475,7 @@ export class PlanManager {
   }
 
   /**
-   * Inject plan mode reminder into messages (Kimi Code-style).
+   * Inject plan mode reminder into messages.
    * Uses full injection on the first call or when the last message is
    * from the user; sparse injection on subsequent assistant turns.
    */

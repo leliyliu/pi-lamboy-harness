@@ -1,5 +1,5 @@
 // ============================================================
-// 18-Level Policy Chain — Kimi Code-style permission policies
+// Permission Policy Chain
 // ============================================================
 
 import type { Policy, PolicyContext, PolicyResult } from './types.ts';

@@ -13,7 +13,7 @@ import { goalArgumentCompletions } from "../completions.ts";
 export function registerGoalCommands(pi: any, goalManager: GoalManager): void {
   // ── /goal command ──
   pi.registerCommand("goal", {
-    description: "Manage the current goal (Kimi Code-style)",
+    description: "Manage the current goal",
     getArgumentCompletions: (prefix: string) => goalArgumentCompletions(prefix),
     handler: async (args: string, ctx: any) => {
       const subcommand = args.trim().split(/\s+/)[0]?.toLowerCase() || "";
@@ -166,7 +166,7 @@ export function registerGoalCommands(pi: any, goalManager: GoalManager): void {
                 break;
               }
               ctx.ui.notify(`Goal set:\n\n${goalManager.formatGoalPanel()}`, "info");
-              // Update status bar (Kimi Code-style)
+              // Update status bar
               if (ctx.ui?.setStatus && ctx.ui?.theme) {
                 ctx.ui.setStatus("goal", ctx.ui.theme.fg("accent", `[goal ● active · 0s · 0 turns]`));
               }

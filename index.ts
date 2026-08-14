@@ -59,7 +59,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   // ── Permission approval dialog: numbered three-way ask (shared with
-  // ask_user_question). Per-tool action titles (Kimi approval-panel
+  // ask_user_question). Per-tool action titles (approval-panel
   // parity); 'once' approves without recording; 'always' records for the
   // session (the old confirm's implicit behavior); deny optionally
   // carries a user reason back to the model.
@@ -160,14 +160,14 @@ export default function (pi: ExtensionAPI) {
       mode === 'auto' ? 'success' : mode === 'yolo' ? 'warning' : 'accent',
       mode
     ));
-    // Goal status bar (Kimi Code-style)
+    // Goal status bar
     const goalBadge = goalManager.buildFooterBadge();
     if (goalBadge) {
       const color = goalManager.getFooterBadgeColor();
       ctx.ui.setStatus("goal", ctx.ui.theme.fg(color, goalBadge));
     }
 
-    // Agent lifecycle badge (Kimi Code-style: [3 agents running])
+    // Agent lifecycle badge ([3 agents running])
     const lifecycleCount = agentLifecycle.getActiveCount();
     ctx.ui.setStatus("lifecycle-agent-count", lifecycleCount > 0
       ? ctx.ui.theme.fg("accent", `[${lifecycleCount} agents running]`)
@@ -260,7 +260,7 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.setStatus("goal", undefined);
     }
 
-    // Agent lifecycle badge (Kimi Code-style)
+    // Agent lifecycle badge
     const lifecycleCount = agentLifecycle.getActiveCount();
     ctx.ui.setStatus("lifecycle-agent-count", lifecycleCount > 0
       ? ctx.ui.theme.fg("accent", `[${lifecycleCount} agents running]`)
@@ -269,7 +269,7 @@ export default function (pi: ExtensionAPI) {
   }
 
   // ── Goal badge wall-clock: 1s tick while a goal is active ──
-  // The badge shows live duration (Kimi Code footer parity); between turn
+  // The badge shows live duration (footer parity); between turn
   // events it would otherwise go stale. Extra renders are coalesced by
   // pi-tui's 16ms cap; unref'd so `pi -p` is never kept alive by it.
   const goalBadgeTicker = setInterval(() => {
@@ -281,7 +281,7 @@ export default function (pi: ExtensionAPI) {
   goalBadgeTicker.unref?.();
 
   // ── turn_end: record token usage + budget check (pi-codex-goal style) ──
-  // ── tool_result: spill oversized outputs to disk (Kimi toolResultTruncation)
+  // ── tool_result: spill oversized outputs to disk (toolResultTruncation)
   // A runaway log must not eat the context window; the full text lands in
   // <sessionDir>/tool-results/ and the model gets a preview + output_path.
   pi.on("tool_result", (event: any, ctx: any) => {
@@ -335,7 +335,7 @@ export default function (pi: ExtensionAPI) {
       goalManager.detectProviderLimitError(errorMsg);
     }
 
-    // Pause goal on user interrupt (Kimi Code-style). TurnEndEvent carries no
+    // Pause goal on user interrupt. TurnEndEvent carries no
     // signal in pi 0.83 (types.d.ts:555-560); older pi may include it.
     if ((event as { signal?: AbortSignal }).signal?.aborted) {
       goalManager.pauseOnInterrupt("User interrupted");
@@ -359,7 +359,7 @@ export default function (pi: ExtensionAPI) {
   // ── Register /todo slash command ──
   registerTodoCommand(pi);
 
-  // ── tool_call: 18-level policy chain + plan mode restrictions ──
+  // ── tool_call: permission policy chain + plan mode restrictions ──
   pi.on("tool_call", async (event, ctx) => {
     // Pause gate: freeze the main agent at its next safe boundary. The
     // tool_call event carries no AbortSignal (pi types.ts:850-897), so a
@@ -377,14 +377,14 @@ export default function (pi: ExtensionAPI) {
 
     // Plan mode restrictions (checked first, before policy chain)
     if (planManager.shouldBlockTool(toolName, filePath, bashCommand)) {
-      // Kimi Code-aligned per-tool deny message (plan-mode-guard-deny.ts parity).
+      // Per-tool deny message (plan-mode-guard-deny.ts parity).
       const planFilePath = planManager.getPlanFilePath();
       const reason = `Plan mode is active. You may only write to the current plan file: ${planFilePath || "(no plan file selected yet)"}. Call exit_plan_mode to exit plan mode before editing other files.`;
       ctx.ui.notify(reason, "warning");
       return { block: true, reason: `Plan Mode: ${reason}` };
     }
 
-    // Kimi Code plan-mode-tool-approve parity: entering plan mode and
+    // plan-mode-tool-approve parity: entering plan mode and
     // write/edit targeting the plan file are approved WITHOUT the
     // permission dialog. exit_plan_mode is also approved — its own
     // review panel handles user approval. (plan-mode-tool-approve.ts)
@@ -398,7 +398,7 @@ export default function (pi: ExtensionAPI) {
       return undefined; // allowed, skip permission chain
     }
     
-    // 18-level permission policy chain
+    // 16-level permission policy chain
     const result = await permissionManager.evaluate(toolName, input, ctx.cwd || process.cwd(), ctx);
     if (result?.block) {
       ctx.ui.notify(`Blocked: ${result.reason}`, "warning");

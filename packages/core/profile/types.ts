@@ -1,5 +1,5 @@
 // ============================================================
-// Profile Types — Kimi Code-aligned sub-agent profile definitions
+// Profile Types — sub-agent profile definitions
 //
 // Each profile declares what tools it may use and carries a
 // roleAdditional prompt that governs the agent's behavior.
@@ -38,7 +38,7 @@ export type ProfileToolName =
   | "skill"
   | "mcp__*";
 
-/** A sub-agent profile (mirrors Kimi Code YAML structure). */
+/** A sub-agent profile (mirrors YAML structure). */
 export interface SubAgentProfile {
   /** Profile name — must match the subagent_type value. */
   name: string;

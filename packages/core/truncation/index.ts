@@ -2,7 +2,7 @@
 // Tool result truncation — spill oversized tool output to disk and
 // keep only a preview + recoverable pointer in the context (pure).
 //
-// Kimi Code's toolResultTruncation pattern (agent/toolResultTruncation):
+// toolResultTruncation pattern (agent/toolResultTruncation):
 // a runaway `npm test` or build log must not eat the context window;
 // the full text lands in a file the model can page through with read.
 // ============================================================

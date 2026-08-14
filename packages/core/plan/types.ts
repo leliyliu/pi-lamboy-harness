@@ -1,5 +1,5 @@
 // ============================================================
-// Plan Types — Kimi Code-style Plan Mode
+// Plan Types — Plan Mode
 // ============================================================
 
 export type PlanStatus = 'inactive' | 'exploring' | 'writing' | 'reviewing' | 'approved' | 'rejected';

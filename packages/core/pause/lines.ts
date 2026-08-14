@@ -131,7 +131,7 @@ export function renderPauseScreen(o: {
   content.push(paint("⏸ PAUSED", style.text, width));
   content.push(blank(width));
   if (!compact) {
-    content.push(paint("主代理、子代理与顾问将在下一步暂停", style.muted, width));
+    content.push(paint("主代理将在下一步暂停", style.muted, width));
     content.push(paint("进行中的调用完成后不再启动新任务", style.muted, width));
     content.push(blank(width));
   }

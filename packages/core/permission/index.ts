@@ -1,5 +1,5 @@
 // ============================================================
-// Permission Manager — 18-level policy chain executor
+// Permission Manager — policy chain executor
 // ============================================================
 
 import type { PermissionMode, PolicyContext, PolicyResult } from './types.ts';
@@ -62,8 +62,8 @@ export class PermissionManager {
    * Evaluate a tool call from an unattended subagent (swarm worker).
    *
    * Workers share the session's permission manager in-process, so a mode
-   * switch propagates to in-flight subagents by construction — the Kimi
-   * Code #1948 fan-out is implicit here. 'ask' verdicts cannot be
+   * switch propagates to in-flight subagents by construction — the
+   * #1948 fan-out is implicit here. 'ask' verdicts cannot be
    * answered by a worker, so they degrade to blocks (identical to the
    * no-UI ask path), never to silent approval.
    */
@@ -80,7 +80,7 @@ export class PermissionManager {
   }
 
   /**
-   * Evaluate tool call through the 18-level policy chain.
+   * Evaluate tool call through the policy chain.
    * Returns { block: true, reason } to block, or undefined to allow.
    */
   async evaluate(

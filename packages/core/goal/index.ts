@@ -1,5 +1,5 @@
 // ============================================================
-// Goal System — Kimi Code-style lifecycle + persistence + injection
+// Goal System — lifecycle + persistence + injection
 // ============================================================
 
 import type { GoalSnapshot, GoalStatus, GoalActor, GoalBudgetLimits } from "./types.ts";
@@ -129,12 +129,12 @@ export class GoalManager {
     return updated;
   }
 
-  /** Pause → paused (Kimi Code-style wall clock handling) */
+  /** Pause → paused (wall clock handling) */
   pause(actor: GoalActor = "user"): GoalSnapshot | null {
     const g = goalState.current;
     if (!g || g.status === "complete") return null;
 
-    // Fold live wall clock interval into total (Kimi Code-style)
+    // Fold live wall clock interval into total
     const now = Date.now();
     let wallClockMs = g.wallClockMs;
     if (g.status === "active" && g.wallClockResumedAt !== undefined) {
@@ -151,7 +151,7 @@ export class GoalManager {
     return updated;
   }
 
-  /** Resume paused/blocked → active (Kimi Code-style wall clock handling) */
+  /** Resume paused/blocked → active (wall clock handling) */
   resume(actor: GoalActor = "user"): GoalSnapshot | null {
     const g = goalState.current;
     if (!g || g.status === "complete") return null;
@@ -233,7 +233,7 @@ export class GoalManager {
   }
 
   /**
-   * Mark complete. Kimi Code: preserves completionSummary.
+   * Mark complete. Preserves completionSummary.
    * P0 (2): when `goal.completionCriterion` is declared (non-empty), the caller
    * MUST pass `verified=true` to complete; otherwise completion is refused and
    * the goal is left untouched. When no criterion is declared, completion is
@@ -291,7 +291,7 @@ export class GoalManager {
    * null current goal, so without a tombstone the cleared goal's last entry
    * would remain the most recent one — and any restore-from-entries (next
    * session start, or the restore-if-empty at goal tool entry points) would
-   * resurrect the cleared goal with its stale counters. Kimi Code semantics:
+   * resurrect the cleared goal with its stale counters. Semantics:
    * an ended goal never rests on disk as restorable state.
    */
   clear(actor: GoalActor = "user"): void {
@@ -308,7 +308,7 @@ export class GoalManager {
   }
 
   /**
-   * Pause on user interrupt (Kimi Code-style pauseOnInterrupt).
+   * Pause on user interrupt (pauseOnInterrupt).
    * Called when user presses Esc, Ctrl+C, or any turn-level cancellation.
    */
   pauseOnInterrupt(reason?: string): GoalSnapshot | null {
@@ -320,7 +320,7 @@ export class GoalManager {
   // ── Budget & Accounting ────────────────────────────────────────────────
 
   /**
-   * Record a turn / token usage (Kimi Code-style).
+   * Record a turn / token usage.
    * Returns `{ crossedBudget }` if this turn pushed over the budget.
    * Auto-blocks the goal when budget is exceeded.
    */
@@ -363,7 +363,7 @@ export class GoalManager {
   }
 
   /**
-   * Record token usage without incrementing turns (Kimi Code-style).
+   * Record token usage without incrementing turns.
    */
   recordTokenUsage(delta: number): void {
     const g = goalState.current;
@@ -378,7 +378,7 @@ export class GoalManager {
   }
 
   /**
-   * Increment turn count (Kimi Code-style).
+   * Increment turn count.
    */
   incrementTurn(): void {
     const g = goalState.current;
@@ -397,7 +397,7 @@ export class GoalManager {
   }
 
   /**
-   * Set budget limits on the current goal (Kimi Code-style).
+   * Set budget limits on the current goal.
    */
   setBudgetLimits(limits: GoalBudgetLimits, actor: GoalActor = "user"): GoalSnapshot | null {
     const g = goalState.current;
@@ -561,7 +561,7 @@ export class GoalManager {
   // ── Prompt Injection ───────────────────────────────────────────────────
 
   /**
-   * Budget guidance string for prompt injection (Kimi Code-style).
+   * Budget guidance string for prompt injection.
    */
   budgetBandGuidance(): string | undefined {
     const g = goalState.current;
@@ -582,7 +582,7 @@ export class GoalManager {
     return `${b}: ${g.objective.slice(0, 80)}${reason}${actor}  [turns:${g.turnsUsed} tokens:${g.tokensUsed}]`;
   }
 
-  /** Build a GoalPanel-style formatted report (Kimi Code-style) */
+  /** Build a GoalPanel-style formatted report */
   formatGoalPanel(goal?: GoalSnapshot): string {
     const g = goal || goalState.current;
     if (!g) return "No goal set.";
@@ -637,7 +637,7 @@ export class GoalManager {
   }
 
   /**
-   * Build Goal Badge for footer (Kimi Code-style).
+   * Build Goal Badge for footer.
    * Format: [goal ● active · 4m · 7/20 turns]
    */
   buildFooterBadge(): string | undefined {
@@ -806,7 +806,7 @@ export class GoalManager {
       for (let i = entries.length - 1; i >= 0; i--) {
         const e = entries[i] as any;
         if (e.type === "custom" && e.customType === GOAL_ENTRY_TYPE && e.data) {
-          // Tombstone: an ended goal is not restorable (Kimi Code: complete
+          // Tombstone: an ended goal is not restorable (complete
           // never rests on disk).
           if (e.data.status === "complete") return false;
           this.restoreFromData(e.data);

@@ -11,7 +11,7 @@ import { runPauseScreen } from "./screen";
 export function registerPauseCommands(pi: ExtensionAPI): void {
   // ── /pause — freeze the agent at the next safe boundary ──
   pi.registerCommand("pause", {
-    description: "Freeze all agents at the next safe boundary",
+    description: "Freeze the agent at the next safe boundary",
     handler: async (_args, ctx) => {
       const ok = await runPauseScreen(ctx);
       if (!ok) {

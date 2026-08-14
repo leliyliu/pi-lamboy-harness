@@ -69,7 +69,7 @@ export function registerGoalTools(pi: any, goalManager: GoalManager): void {
           content: [{ type: "text", text: `Cannot create goal: ${err?.message ?? String(err)}` }],
         };
       }
-      // Update status bar after creating goal (Kimi Code-style)
+      // Update status bar after creating goal
       if (ctx?.ui?.setStatus && ctx?.ui?.theme) {
         ctx.ui.setStatus("goal", ctx.ui.theme.fg("accent", `[goal ● active · 0s · 0 turns]`));
       }

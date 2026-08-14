@@ -1,7 +1,7 @@
 // ============================================================
 // TUI — MuselinnEditor: custom pi editor with switchable chrome.
 //
-//   boxed   — Kimi Code-style closed box (╭╮│╰╯) with spinner/model
+//   boxed   — closed box (╭╮│╰╯) with spinner/model
 //             embedded in the top border.
 //   compact — pi-spark-style: plain side-less editor, top border carries
 //             spinner left + model right.
@@ -69,7 +69,7 @@ export class MuselinnEditor extends CustomEditor {
   /**
    * Detect an autocomplete open→close edge from a render frame and force a
    * full re-render so the editor snaps back to the bottom instead of
-   * sitting where the taller dropdown left it (kimi custom-editor.ts:261
+   * sitting where the taller dropdown left it (custom-editor.ts:261
    * parity). Running from render() also catches asynchronous closes — e.g.
    * Backspace deleting the leading `/`, where pi-tui only cancels the menu
    * once the provider re-query resolves.

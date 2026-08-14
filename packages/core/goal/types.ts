@@ -1,5 +1,5 @@
 // ============================================================
-// Goal Types — Kimi Code-style lifecycle + Budget Report
+// Goal Types — lifecycle + Budget Report
 // ============================================================
 
 export type GoalStatus = 'active' | 'paused' | 'blocked' | 'complete' | 'usage_limited' | 'budget_limited';
@@ -61,7 +61,7 @@ export interface GoalSnapshot {
   budgetLimits?: GoalBudgetLimits;
   budget?: GoalBudgetReport;
   terminalReason?: string;
-  completionSummary?: string;    // Kimi Code: preserved after goal completion
+  completionSummary?: string;    // preserved after goal completion
   /** Queue position if goal is part of a queue */
   queueIndex?: number;
 }

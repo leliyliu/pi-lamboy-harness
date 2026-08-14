@@ -9,66 +9,35 @@ Fork 自 [MuseLinn/pi-muselinn-harness](https://github.com/MuseLinn/pi-muselinn-
 ## Quick start
 
 ```bash
-pi install npm:pi-muselinn-harness     # or: pi install git:github.com/MuseLinn/pi-muselinn-harness
-pi                                      # restart, then:
+pi install git:github.com/leliyliu/pi-lamboy-harness   # personal fork; or: pi install /path/to/pi-lamboy-harness
+pi                                                      # restart, then:
 ```
 
 Try it out:
 
 ```
-/swarm on                                # enable swarm mode
 /goal Refactor the auth module           # set a goal with budget tracking
 /todo init "Phase 1: scanner"            # start a phased task plan
 /plan                                    # enter plan mode (read-only exploration)
-/pause                                   # freeze everything; esc/enter/space/ctrl+c resumes
+/pause                                   # freeze; esc/enter/space/ctrl+c resumes
 /tui style plain|boxed|compact           # switch editor chrome anytime
 ```
 
-Everything works out of the box — **no companion extensions required**. All
-tools are model-callable, all commands are slash commands with Tab completion.
-
-> **Upgrading from ≤ 0.7.4?** Remove the old companion extensions — they
-> conflict with the built-in tools (pi refuses to start on duplicate tool
-> names):
-> ```bash
-> pi remove npm:@juicesharp/rpiv-ask-user-question
-> pi remove npm:rpiv-todo
-> ```
+All tools are model-callable, all commands are slash commands with Tab completion.
 
 ## Features
 
-### Swarm
-- **In-process subagents** — `createAgentSession()` execution, `coder` / `explore` / `plan` types
-- **Real concurrency control** — `runProgressive()` worker pool with true `max_concurrency` cap + exponential backoff retries
-- **30-minute timeout** — per-subagent `AbortSignal.timeout` (aligned with Kimi Code)
-- **run_in_background** — whole swarm goes to a background task, early task-ID return, report written to `output_path`
-- **Smart model routing** — task-aware selection from `ctx.modelRegistry`
-- **Braille progress bars** — driven by real tool-call progress, 250 ms frames with a state-fingerprint gate (unchanged frames cost nothing)
-- **Harness-branded spinner** — single-width braille rotation by default (`PI_MUSELINN_SPINNER=braille|pulse|bounce|moon`, incl. Kimi moon-phase compat)
-- **Adaptive layout** — pi-tui Component protocol, status bar width adapts to the terminal (10–60)
-- **Three-pane task browser** — status glyphs (○ pending / ◐ running / ✓ done / ✗ failed / ▲ aborted), strikethrough on done rows, overflow collapse (`+N more`, running kept first), named keybindings, `ctrl+shift+t`
-- **Cancel / resume** — UserCancellationError + AbortSignal chain, two-step `/cancel`
+### Pause (freeze, inspect)
 
-### Pause & steer (freeze, inspect, redirect)
-- **`/pause` full-screen freeze** — the main agent and every swarm subagent
-  park at their next safe boundary (tool-call gate): in-flight calls run to
-  completion, nothing is aborted, and a later release continues exactly where
-  each loop parked. A full-screen overlay — theme-colored pause glyph, live
-  hold timer — covers the terminal; esc/enter/space/ctrl+c releases, leaving a
-  status line in the session transcript (`已恢复（暂停 13s）— 代理继续运行`).
-  When the pause lands mid-tool, the overlay tags it `<tool_call>`.
-- **Transcript recording** — every subagent's conversation is written to
-  `<sessionDir>/agents/<taskId>/wire.jsonl` (user / assistant → tool-call
-  lines, timestamps, stop reasons, usage; tool arguments deliberately
-  omitted). Press `c` in the task browser (`/tasks` / `ctrl+shift+t`) for a
-  conversation view, or Read the file directly.
-- **`/steer <taskId> <message>`** — injects a message into a running subagent
-  (swarm session or background task; Tab-completed task ids). The agent loop
-  delivers it once the current tool call completes — no cancel/restart needed.
-- **Safe boundaries** — cancelling a single parked run (AbortSignal) unwinds
-  only that wait, never the gate; background tasks (`run_background`) are not
-  frozen (their tool calls bypass the harness gate) but do get transcripts and
-  steering.
+- **`/pause` full-screen freeze** — the agent parks at the next safe boundary
+  (tool-call gate): in-flight calls run to completion, nothing is aborted, and
+  a later release continues exactly where the loop parked. A full-screen
+  overlay — theme-colored pause glyph, live hold timer — covers the terminal;
+  esc/enter/space/ctrl+c releases, leaving a status line in the session
+  transcript (`已恢复（暂停 13s）— 代理继续运行`). When the pause lands
+  mid-tool, the overlay tags it `<tool_call>`.
+- **Safe boundaries** — cancelling a parked run (AbortSignal) unwinds only
+  that wait, never the gate.
 - **Theme-colored overlay** — icon/headline/body/hints render with the active
   theme's `accent`/`text`/`muted`/`dim`; the terminal background is the
   backdrop. Block glyphs (█ / ⏸) are measured single-width, so the pause
@@ -87,7 +56,7 @@ tools are model-callable, all commands are slash commands with Tab completion.
 
 ### Plan
 - **Plan mode** — the LLM explores, writes a plan, and only executes after approval
-- **Kimi Code permission model** — bash is NOT blocked in plan mode; it follows the normal permission mode (auto/yolo/manual). Only Write/Edit (outside plan file), TaskStop, CronCreate, CronDelete are blocked
+- **Permission model** — bash is NOT blocked in plan mode; it follows the normal permission mode (auto/yolo/manual). Only Write/Edit (outside the plan file) are blocked
 - **Plan file path matching** — exact path, `local://` scheme basename, and resolved absolute path under `sessionDir/plans/` — all three accepted
 - **ExitPlanMode reads the plan file** — presentation matches what was actually written to disk
 - **Revise keeps your plan** — a revised or cancelled review re-enters plan mode with the same plan object (id/path/content), never a trap, never lost work; review timeout 600 s
@@ -95,36 +64,14 @@ tools are model-callable, all commands are slash commands with Tab completion.
 - **Context injection** — the plan is injected into the system prompt
 
 ### Permission
-- **18-level policy chain** — `auto` / `yolo` / `manual`; safety policies (destructive, sensitive files) short-circuit before modes
+- **Policy chain** — `auto` / `yolo` / `manual`; safety policies (destructive, sensitive files) short-circuit before modes
 - **Destructive detection** — `rm -rf` / `git push --force` / `drop table` / `git reset --hard` regex recognition, always asks, never short-circuited by session approvals
 - **Sensitive-file guard** — `.env` / `id_rsa` / `*.key` read/write interception, even in auto mode
 - **Session approval fingerprints** — approvals remembered per sessionId + input fingerprint, never degrading into "permanent allow"
 - **Approval panel** — numbered dialog with per-tool action titles ("Run this command?" / "Apply these edits?"), digit-key direct select, four outcomes: Allow once / Always allow (session) / Deny / Deny with reason (reason relayed to the model). In RPC hosts (obsidian-pi etc.) the same choices render over the extension UI protocol (`select` / `input` / `confirm`) instead of the TUI dialog — no more silent denials
-- **Subagent gating** — swarm worker tool calls run through the same policy chain (shared in-process manager): `/mode` switches propagate to in-flight subagents by construction, `ask` verdicts degrade to blocks (never silent approval)
 - **AGENTS.md hierarchy** — project (nearest `AGENTS.md` or `.kimi-code/AGENTS.md`) → global `$KIMI_CODE_HOME/AGENTS.md` → cross-tool `~/.agents/AGENTS.md`, aggregated; `destructive-ask-always` can upgrade ask to deny
 - **Config cache** — permission config cached by file mtime, edits take effect immediately
 - **Persistent startup mode** — optional `"defaultMode": "auto" | "yolo" | "manual"` in `~/.pi/agent/permissions.json` (global) or `.pi/permissions.json` (project; global wins on conflict) replaces the hardcoded `manual` startup mode, so new sessions start in your preferred mode without an interactive `/mode` call. A session with a recorded `/mode` history still restores the last used mode; `defaultMode` is the starting point for fresh sessions.
-
-### Task (background + cron)
-- **run_background** — subagent in the background, immediate task ID; `output_path` pages full output via Read
-- **30-minute timeout** — background tasks auto-fail (`stopReason=timeout_30min`)
-- **task_list / task_output / task_stop** — `active_only` filter, `block+timeout` waiting, `offset/limit` paging
-- **50-task cap** + **7-day stale cleanup** + orphaned tasks degrade to `process_restart` on restart
-- **Incremental persistence** — single-task changes append a single entry; restore stays compatible with old snapshots
-- **Cron** — 5-field cron (local timezone) + deterministic jitter (10% of period, ≤15 min) + recurring/one-shot + 50 cap + 7-day stale auto-delete
-
-### Hooks
-- **Kimi Code-aligned `[[hooks]]` engine** — reads `$KIMI_CODE_HOME/config.toml` (default `~/.kimi-code/config.toml`) + project `.kimi-code/config.toml`; event/matcher/command/timeout fields
-- **Full event coverage** — UserPromptSubmit / PreToolUse / Stop (blockable) + PostToolUse / PostToolUseFailure / PermissionRequest / PermissionResult / SessionStart / SessionEnd / SubagentStart / SubagentStop / StopFailure / Interrupt / PreCompact / PostCompact / Notification
-- **Exit-code semantics** — `0` allow (stdout appended as context), `2` block (stderr as reason), anything else / timeout / crash fails open; stdout JSON `permissionDecision: deny` supported
-- **Built-in TOML mini-parser** — zero dependencies; invalid rules warn and skip without breaking the extension; mtime-cached hot reload
-- **Safety net** — Stop auto-disables after 3 consecutive blocks (anti-loop); every trigger mirrored to `pi.events` for other extensions
-
-### Skills
-- **Seven-scope pi-native scanning** — project `.pi/skills`, `.kimi-code/skills` (Kimi compat), `.agents/skills` → user `~/.pi/agent/skills`, `~/.pi/skills`, `$KIMI_CODE_HOME/skills`, `~/.agents/skills`; pi-native dirs win, Kimi dirs as compat layer, dedupe by name
-- **Directory + flat forms** — `SKILL.md` subdirs (with auxiliary files) and single `.md` files; full frontmatter fields (name/description/type/whenToUse/disableModelInvocation/arguments, kebab/snake variants)
-- **Available to subagents** — swarm and background subagent sessions receive skills via resourceLoader; the main session is injected via `resources_discover` (collision-free: only files from dirs pi does not scan natively, minus names pi already provides)
-- **Zero-dependency frontmatter parser** + mtime directory-tree cache
 
 ### TUI
 - **Closed-box editor** — Kimi Code's `wrapWithSideBorders` ported: pi-tui's horizontal-only borders post-processed into a `╭╮│╰╯` closed box; spinner + working state (Thinking/Streaming/Running tools) embedded in the top border; three styles `plain | boxed | compact` (pi-spark-style info border = compact), default boxed; model name opt-in via `"modelInBorder": true`
@@ -139,7 +86,7 @@ tools are model-callable, all commands are slash commands with Tab completion.
 
 ### Ask (interactive questions)
 - **`ask_user_question` tool** — the agent asks 1-4 structured questions in one tabbed dialog: per-question header tabs (`1/3 · header`, ←/→/Tab to switch), numbered options with description sub-lines, `multi_select` checkboxes (Space toggles, Enter confirms), and an automatic free-text **Other** option on every question; digit keys 1-9 jump straight to an option, arrows/jk navigate, Esc cancels
-- **Robust by default** — long option lists scroll inside a bounded window, duplicate answers are deduplicated, and questions can be posed from background tasks without wedging the UI
+- **Robust by default** — long option lists scroll inside a bounded window, and duplicate answers are deduplicated
 - **Previews, notes, chat row** — options can carry Markdown **previews** (side-by-side pane on wide terminals, stacked below on narrow ones); attach a per-option **note** with `n`; a **Chat about this** row ends the dialog with a `chat` result so the user can discuss the question instead of answering it
 - **Shared dialog component** — the same component backs permission approval (single-select, no Other); in print mode the tool returns the questions as text instead of blocking, and in RPC mode permission approvals fall back to `select`/`confirm`/`input`
 - **Answer reporting** — per-question answers (multi-select as an array); skipped questions and Esc-cancelled dialogs are reported distinctly
@@ -150,74 +97,34 @@ tools are model-callable, all commands are slash commands with Tab completion.
 - **`/todo` command** — full oh-my-pi phase model: `init`, `start`, `done`, `drop`, `rm`, `append`, `export`, `import`, `copy`, `edit`, `add_notes`, `update_details`, bare `/todo` prints Markdown
 - **`todo_list` tool** — model-driven task management with same ops
 - **Reminder system** — incomplete todos injected as `<system-reminder>` when agent stops (max 3 reminders, debounced)
-- **Subagent matching** — pending tasks matching swarm subagent descriptions get highlighted with `◔` spinner
 - **Markdown round-trip** — `/todo export/import` for persistence and sharing between sessions
 - **Notes** — per-task notes via `add_notes` / `update_details`
 - **Phase counts** — widget header shows `N active · M pending · K done`
 - **Session persistence** — survives hot-reload and session restart
 
-### Web fetch
-- **`fetch_url` tool** — no-auth URL fetch (20s timeout, 5MB stream cap, redirect follow); HTML → readable text (dependency-free extractor), JSON → pretty-print, everything else raw; 20k char cap with `max_chars` tuning
-- **Full web access via [pi-web-access](https://pi.dev/packages/pi-web-access)** — recommended companion for `web_search` / `fetch_content` (multi-provider search, GitHub repo cloning, PDF / YouTube / local-video understanding). Its `web_search` and `fetch_content` tools sit in the permission system's read-only allowlist — auto-approved in every mode, including plan mode, so no approval prompts interrupt the flow. Install: `pi install npm:pi-web-access`
-
-### Plugins (declarative bundles)
-- **`muselinn.plugin.json`** — six declarative capabilities: `skills` (skill dirs merged into discovery), `sessionStart` (context injected on the session's first turn), `hooks` (merged into the `[[hooks]]` engine), `commands` (.md files become slash commands), plus `mcpServers` / `interface` recorded with skipped-diagnostics
-- **Discovery** — project `.pi/plugins/*/` then user `~/.pi/agent/plugins/*/`, first-wins name dedupe; `/plugins` lists capabilities and diagnostics
-
 ### Output truncation
-- **Oversized tool results spill to disk** — results over the spill threshold are written to `<sessionDir>/tool-results/` and replaced in context with a sanitized head+tail preview carrying the `output_path` and read-paging instructions (Kimi `toolResultTruncation` pattern)
+- **Oversized tool results spill to disk** — results over the spill threshold are written to `<sessionDir>/tool-results/` and replaced in context with a sanitized head+tail preview carrying the `output_path` and read-paging instructions (`toolResultTruncation` pattern)
 - **Window-aware threshold** — the threshold scales with the active model's context window (`max(40k, window × 4 chars/token)`, capped at 800k chars ≈ 200k tokens), so 1M-context models keep far more output in-context; `PI_TRUNCATION_THRESHOLD` overrides it explicitly
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/swarm on\|off` | Toggle swarm mode |
-| `/pause` | Freeze all agents at the next safe boundary (esc/enter/space/ctrl+c resumes) |
-| `/steer <taskId> <message>` | Send a message to a running subagent |
-| `/cancel` | Cancel current work (two-step confirm) |
-| `/resume` | Resume an interrupted swarm |
-| `/tasks` | Task browser (`ctrl+shift+t`) |
+| `/pause` | Freeze the agent at the next safe boundary (esc/enter/space/ctrl+c resumes) |
 | `/goal <objective>` | Set a goal |
 | `/todo` | Task plan with phase model; shortcuts: `start` `done` `drop` `export` `import` `copy` `edit` `toggle` |
 | `/todo toggle` | Expand/collapse the todo panel (replaces former `alt+t`) |
-| `/plugins` | List loaded plugins and their capabilities |
-| `/swarm-status` | Show status |
 
-> `/goal` `/swarm` `/plan` `/mode` `/tui` all support Tab completion.
+> `/goal` `/plan` `/mode` `/tui` all support Tab completion.
 
 ## Tools
 
 | Tool | Description |
 |------|-------------|
-| `agent_swarm` | Batch parallel subagents (`max_concurrency` / `run_in_background` / `output_path` / `model_map`) |
-| `agent` | Single subagent |
 | `create_goal` / `get_goal` / `update_goal` / `set_goal_budget` | Goal management |
 | `enter_plan_mode` / `exit_plan_mode` | Plan mode |
 | `ask_user_question` | Tabbed structured questions (multi-select, Other free text) |
 | `todo_list` | Model-driven task plan with inline panel |
-| `fetch_url` | No-auth URL fetch with content-aware extraction |
-| `run_background` / `task_list` / `task_output` / `task_stop` | Background tasks |
-| `cron_create` / `cron_list` / `cron_delete` | Cron jobs |
-
-## Kimi Code alignment
-
-Against the [Kimi Code CLI docs — Agents & Subagents](https://www.kimi.com/code/docs/kimi-code-cli/customization/agents.html):
-
-| Capability | Status | Notes |
-|------------|--------|-------|
-| Three built-in subagent types (coder/explore/plan) | ✅ | coder=read/write+bash; explore=read-only; plan=read-only, no shell |
-| Context isolation | ✅ | Independent sessions; only final results flow back |
-| Parallel dispatch + max_concurrency | ✅ | Real worker-pool cap + progressive launch |
-| 30-minute timeout | ✅ | Per-subagent AbortSignal.timeout |
-| Background execution (run_in_background) | ✅ | Early task-ID return, blockable task_output, report to output_path |
-| Resume an existing subagent | ⚠️ | Conservative semantics: same-id re-run; resume validated (saved state + nothing in flight + remaining items); true session resume pending pi-coding-agent API |
-| Nested subagents (coder spawning more) | ❌ | Deliberately closed — no recursive dispatch; subagent toolset excludes agent/agent_swarm |
-| Permission inheritance | ✅ | Worker tool calls pass through the shared policy chain; /mode propagates by construction; asks degrade to blocks |
-| Instruction-file hierarchy | ✅ | Project `AGENTS.md` / `.kimi-code/AGENTS.md` → `$KIMI_CODE_HOME/AGENTS.md` → `~/.agents/AGENTS.md` |
-| wire.jsonl session persistence | ⚠️ | Per-subagent transcripts (`agents/<id>/wire.jsonl`, user/assistant/tool-call, no tool args) + conversation viewer; full session resume pending pi-coding-agent API |
-| Hooks (`[[hooks]]` lifecycle) | ✅ | All 16 events, exit-code/stdout-JSON block semantics, fail-open |
-| Agent Skills (four scopes) | ✅+ | Kimi's four covered and extended to seven pi-native scopes; directory + flat forms; subagent + main-session channels |
 
 ## Architecture
 
@@ -225,51 +132,32 @@ Core/adapter split: `packages/core/` is pure logic with **zero pi imports**;
 the repo root holds the pi adapter (entry, pi-tui components, tool registration).
 
 ```
-pi-muselinn-harness/
-├── index.ts               entry (agent_swarm/agent tools, background runner, module wiring)
-├── state.ts               shared state
+pi-lamboy-harness/
+├── index.ts               entry (permission/plan wiring, truncation, module registration)
 ├── packages/core/         @muselinn/core — pure logic, no host imports
 │   ├── ports.ts           host contracts (PersistencePort, ScopeDirs)
 │   ├── text-utils.ts      visibleWidth & friends
 │   ├── shell-output.ts    control-sequence sanitizer
 │   ├── truncation/        oversized tool-result spill (pure)
-│   ├── webfetch/          HTML→text / JSON extraction (pure)
 │   ├── completions.ts     slash-command argument completions
 │   ├── ask/               question spec + formatting (pure)
-│   ├── todo/              todo model + Kimi folding strategy (pure)
-│   ├── plugin/            muselinn.plugin.json manifest parse/discovery
+│   ├── todo/              todo model + folding strategy (pure)
 │   ├── goal/              Goal module (state machine, budgets, queue, persistence)
 │   ├── plan/              Plan module (tool whitelist, path guard, injection)
-│   ├── permission/        Permission module (18-level chain, approval contract)
+│   ├── permission/        Permission module (policy chain, approval contract)
 │   ├── pause/             pause gate + full-screen overlay layout (pure, theme-injectable)
-│   ├── hooks/             Hooks module (TOML mini-parser, executor, 16 events)
-│   ├── skills/            Skills module (frontmatter, seven-scope scanner)
-│   ├── swarm/             pure swarm half
-│   │   ├── types.ts       state/constants (+ goal re-export)
-│   │   ├── helpers.ts     braille bars / layout / spinner (memoized)
-│   │   ├── estimator.ts   progress estimation (geometric mean)
-│   │   ├── widget-lines.ts braille grid line builders (pure)
-│   │   ├── wrap-tools.ts  permission gate wrapper (pure)
-│   │   ├── resume-guard.ts resume ownership/idle validation (pure)
-│   │   ├── report.ts      swarm report formatting
-│   │   └── task-list-utils.ts collapse + key routing
-│   ├── task/              cron + task persistence state (pure)
-│   └── tui/               box/config/parse/switch/timing (pure chrome parts)
-├── swarm/                 adapter: subagent execution, /swarm commands,
-│                          SwarmWidgetComponent, three-pane task browser
-├── pause/                 adapter: /pause overlay component, /steer command
-├── task/                  adapter: background task manager (session spawn)
+│   ├── profile/           sub-agent profile definitions (unused — Phase 2 cleanup)
+│   └── tui/               box/config/parse/switch/timing/spinner (pure chrome parts)
+├── pause/                 adapter: /pause overlay component
 ├── tui/                   adapter: MuselinnEditor + event wiring
 ├── ask/                   adapter: question dialog + ask_user_question tool
 ├── todo/                  adapter: todo_list tool + inline panel widget
-├── webfetch/              adapter: fetch_url tool
-├── plugin/                adapter: plugin loader + /plugins command
 └── tests/                 node-level unit tests (below)
 ```
 
 ## Tests
 
-Pure node-level unit tests, no model quota needed (28 suites, 830+ assertions):
+Pure node-level unit tests, no model quota needed (18 suites, 600 assertions):
 
 ```bash
 npm test                                        # all suites (node tests/run-all.mjs)
@@ -280,46 +168,34 @@ or individually:
 
 ```bash
 node tests/musepi-config.test.mjs                 # MusePi config compat — 9
-node tests/permission.test.mjs                    # Permission policy chain + subagent gate — 26
+node tests/permission.test.mjs                    # Permission policy chain — 26
 node tests/goal.test.mjs                          # Goal state machine + monotonic restore — 32
-node tests/plan.test.mjs                          # Plan mode round-trip + restore validation — 42
-node tests/task.test.mjs                          # Task restore/list/output/block + loader runtime — 16
-node tests/cron.test.mjs                          # Cron subsystem — 16
-node tests/hooks.test.mjs                         # Hooks engine — 43
-node tests/skills.test.mjs                        # Skills scan/parse/scopes/discover — 38
-node tests/tui.test.mjs                           # TUI collapse/keys/completions/spinner — 63
+node tests/plan.test.mjs                          # Plan mode round-trip + restore validation — 37
+node tests/tui.test.mjs                           # TUI collapse/keys/completions/spinner — 36
 node tests/tui-box.test.mjs                       # TUI box/config/probe/switch — 63
 node tests/tui-adapter.test.mjs                   # TUI adapter working-state render path — 4
-node tests/agent-file.test.mjs                   # agent file discovery/parse — 11
 node tests/agent-lifecycle.test.mjs               # agent lifecycle events — 6
-node tests/ask.test.mjs                           # ask spec/dialog/answers/approval titles — 123
+node tests/ask.test.mjs                           # ask spec/dialog/answers/approval titles — 118
 node tests/tool-policy.test.mjs                  # tool policy gate — 13
-node tests/pause-gate.test.mjs                    # pause gate + full-screen render — 55
-node tests/transcript.test.mjs                     # transcript wire.jsonl recording — 26
-node tests/steering.test.mjs                       # steering queue drain — 8
+node tests/pause-gate.test.mjs                    # pause gate + full-screen render — 54
 node tests/todo.test.mjs                          # todo model + folding strategy — 99
 node tests/shell-output.test.mjs                  # output sanitizer — 21
 node tests/shimmer.test.mjs                     # shimmer sweep engine — 10
 node tests/truncation.test.mjs                    # tool-result spill + window-aware threshold — 21
 node tests/approval-rpc.test.mjs                  # RPC approval fallback (select/confirm) — 21
-node tests/resume-guard.test.mjs                  # swarm resume validation — 6
-node tests/webfetch.test.mjs                      # web extraction — 12
-node tests/plugin.test.mjs                        # plugin manifest/discovery — 17
 node tests/renderer.test.mjs                      # incremental renderer buffer/tree — 16
 node tests/stream-rules.test.mjs                  # stream entry rules — 14
 ```
 
 The suites run on Node 22/24/26 (22.6–22.17 via
 `--experimental-strip-types`, older legs via `tests/ts-esm-loader.mjs`; 22.18+
-strips types natively). CI runs the full matrix — macOS + ubuntu + windows ×
-node 24/26 — on every push and PR.
+strips types natively).
 
 ## Roadmap
 
-- **i18n** — bilingual harness UI text and notifications (docs are already split en/zh-CN; the project page has an EN/中 toggle)
+- **i18n** — bilingual harness UI text and notifications (docs are already split en/zh-CN)
 - **Math renderer graduation** — merge `feature/math-renderer` once compaction-path context safety is confirmed
-- **Clustered diff preview** — kimi-style ±3-line clustered diffs in edit/write approval messages (deferred from the P1 batch)
-- **True fullscreen** — the pause overlay already covers the whole terminal (shipped in 0.9.19); container-swap fullscreen for the task browser (kimi tasks-browser pattern) is still open — no alt-screen, preserving terminal scrollback
+- **Clustered diff preview** — ±3-line clustered diffs in edit/write approval messages (deferred from the P1 batch)
 
 ## Dependencies
 

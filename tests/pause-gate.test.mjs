@@ -107,7 +107,7 @@ check("width: CJK punctuation double-width", displayWidth("，") === 2);
 const f1text = f1.map(strip).join("\n");
 check("screen: PAUSED header", f1text.includes("⏸ PAUSED"));
 check("screen: clock 0:05", f1text.includes("paused for 0:05"));
-check("screen: body lines present", f1text.includes("主代理、子代理与顾问将在下一步暂停"));
+check("screen: body lines present", f1text.includes("主代理将在下一步暂停"));
 check("screen: resume hint present", f1text.includes("esc/enter/space/ctrl+c 释放"));
 // ⏸ (1 col) + " PAUSED" (7) = 8 cols -> pad = floor((100-8)/2) = 46
 check("screen: title centered", /^ {46}⏸ PAUSED/.test(strip(f1.find((s) => strip(s).includes("⏸ PAUSED")) ?? "")));
@@ -137,7 +137,7 @@ const f3 = renderPauseScreen({ width: 40, height: 12, pausedAt: now - 5000, nowM
 const f3text = f3.map(strip).join("\n");
 check("compact: full height rows", f3.length === 12);
 check("compact: header + clock", f3text.includes("⏸ PAUSED") && f3text.includes("paused for 0:05"));
-check("compact: no body lines", !f3text.includes("主代理、子代理与顾问将在下一步暂停"));
+check("compact: no body lines", !f3text.includes("主代理将在下一步暂停"));
 check("compact: no icon bars", f3.every((s) => !strip(s).trim().startsWith("█████")));
 
 // Tiny dimensions never throw and stay bounded

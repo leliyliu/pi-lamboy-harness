@@ -16,7 +16,7 @@ export function liveWallClockMs(state: GoalSnapshot, now: number = Date.now()): 
 }
 
 /**
- * Compute budget report for a goal (Kimi Code-style).
+ * Compute budget report for a goal.
  * Returns remaining amounts and whether each budget is reached.
  */
 export function computeBudgetReport(state: GoalSnapshot, now: number = Date.now()): GoalBudgetReport {
@@ -74,7 +74,7 @@ export function formatBudgetReport(report: GoalBudgetReport): string {
 }
 
 /**
- * Budget guidance string for prompt injection (Kimi Code-style).
+ * Budget guidance string for prompt injection.
  * Returns undefined if no budget limits are set.
  */
 export function budgetBandGuidance(goal: GoalSnapshot | null): string | undefined {

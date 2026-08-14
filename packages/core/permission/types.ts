@@ -1,5 +1,5 @@
 // ============================================================
-// Permission Types — Kimi Code-style 18-level policy chain
+// Permission Types — policy chain
 // ============================================================
 
 export type PermissionMode = 'manual' | 'auto' | 'yolo';
@@ -31,7 +31,7 @@ export interface Policy {
 }
 
 // Read-only tools (auto-approved in all modes and plan mode)
-// Kimi Code-aligned set: all safe/read-only tools are auto-approved
+// All safe/read-only tools are auto-approved
 // so the model can explore without friction.
 export const READ_ONLY_TOOLS = new Set([
   'read', 'grep', 'glob', 'find', 'ls',

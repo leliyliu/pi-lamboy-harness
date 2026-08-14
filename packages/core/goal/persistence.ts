@@ -59,10 +59,10 @@ export function isGoalEntry(entry: any): boolean {
 }
 
 /**
- * Reconstruct goal from session entries (Kimi Code-style normalization).
+ * Reconstruct goal from session entries (normalization).
  * Called during session_start to restore goal state.
  *
- * Normalization rules (from Kimi Code):
+ * Normalization rules:
  * - active → paused (goal can't still be running after restart)
  * - paused → preserved
  * - blocked → preserved
@@ -80,7 +80,7 @@ export function reconstructGoalFromEntries(entries: any[]): GoalSnapshot | null 
 
   const goal = goalFromEntryData(data);
 
-  // Normalize status after replay (Kimi Code-style)
+  // Normalize status after replay
   if (goal.status === 'complete') {
     // Complete goals should have been cleared - discard
     return null;

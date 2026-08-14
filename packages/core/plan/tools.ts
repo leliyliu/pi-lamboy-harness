@@ -124,7 +124,7 @@ export function registerPlanTools(pi: any, planManager: PlanManager): void {
         };
       };
 
-      // Kimi Code-style: auto mode skips approval entirely
+      // Auto mode skips approval entirely
       if (permissionManager.getMode() === "auto") {
         planManager.approvePlan();
         clearPlanBadge();
@@ -134,7 +134,7 @@ export function registerPlanTools(pi: any, planManager: PlanManager): void {
         };
       }
 
-      // Kimi Code-style: show Approval Panel with optional alternatives.
+      // Show Approval Panel with optional alternatives.
       // Primary path: read the actual plan file from disk so the user reviews
       // what was really written (plan.content may be stale / not synced with file).
       // Fallback to in-memory content if the file is missing (ENOENT) or unreadable.

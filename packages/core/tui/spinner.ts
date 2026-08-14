@@ -10,7 +10,7 @@ export const SPINNER_STYLES: Record<string, string[]> = {
   pulse: ["⣀", "⣄", "⣤", "⣦", "⣶", "⣷", "⣿", "⣷", "⣶", "⣦", "⣤", "⣄"],
   // Dot bouncing across a braille cell.
   bounce: ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
-  // Legacy Kimi Code moon phases (double-width emoji).
+  // Legacy moon phases (double-width emoji).
   moon: ["\uD83C\uDF11", "\uD83C\uDF12", "\uD83C\uDF13", "\uD83C\uDF14", "\uD83C\uDF15", "\uD83C\uDF16", "\uD83C\uDF17", "\uD83C\uDF18"],
 };
 

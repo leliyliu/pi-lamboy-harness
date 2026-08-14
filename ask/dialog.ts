@@ -501,7 +501,7 @@ export class QuestionDialogComponent extends Container {
   private renderStackedOptions(st: AnswerState): void {
     const theme = this.theme;
 
-    // Scrolled option window (kimi-code parity: at most MAX_VISIBLE_OPTIONS
+    // Scrolled option window (parity: at most MAX_VISIBLE_OPTIONS
     // rows; the window follows the cursor, overflow gets ↑/↓ indicators).
     const win = optionWindow(st.cursor, st.optionCount);
     if (win.hiddenAbove > 0) {
