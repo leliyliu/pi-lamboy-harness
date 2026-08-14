@@ -53,7 +53,6 @@ import { approvalTitleFor } from "./packages/core/ask/types";
 import { shouldTruncate, truncationPathFor, buildTruncatedPreview, truncationThresholdFor } from "./packages/core/truncation/index";
 import { registerTodoList, registerTodoReminders, bindTodoSession, clearTodoSession, restoreTodos, rt, persist, refreshWidget, togglePanel, syncTodoAutoClearTimer } from "./todo/index";
 import { phasesToMarkdown, markdownToPhases, applyOp, TodoPhase, TodoItem } from "./packages/core/todo/types";
-import { loadPlugins, injectPluginSessionStart, registerPluginCommand, getPluginSkillFiles } from "./plugin/index";
 import { listDiscoverableSkillFiles } from "./packages/core/skills";
 import { registerTui, setTuiBadgeProvider } from "./tui/index";
 import { agentPauseGate } from "./packages/core/pause/gate";
@@ -188,7 +187,7 @@ export default function (pi: ExtensionAPI) {
   try {
     pi.on("resources_discover", async (event: { cwd: string }) => {
       try {
-        const skillPaths = [...listDiscoverableSkillFiles(event.cwd || process.cwd()), ...getPluginSkillFiles()];
+        const skillPaths = [...listDiscoverableSkillFiles(event.cwd || process.cwd())];
         return skillPaths.length > 0 ? { skillPaths } : undefined;
       } catch {
         return undefined;
@@ -277,8 +276,6 @@ export default function (pi: ExtensionAPI) {
   // ── session_start: restore goal + plan from persisted entries + set status bar ──
   pi.on("session_start", async (_event, ctx) => {
     latestCtx = ctx;
-    // Plugin sessionStart bundles → first-turn context
-    try { injectPluginSessionStart(pi); } catch { /* ok */ }
     // Set plan session directory (for plan file storage)
     try { planManager.setSessionDir(ctx.sessionManager.getSessionDir()); } catch { /* ok */ }
     // Capture session dir for subagent transcript 落盘 (swarm + background)
@@ -576,8 +573,6 @@ export default function (pi: ExtensionAPI) {
   registerTodoList(pi);
   registerTodoReminders(pi);
   registerAgentFileTools(pi);
-  registerPluginCommand(pi);
-  try { loadPlugins(pi, null); } catch (e:any) { /* ok */ }
   goalManager.registerCommands(pi);
 
   // ── Register plan tools and commands (from plan/ module) ──
