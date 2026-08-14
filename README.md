@@ -1,31 +1,10 @@
-# pi-muselinn-harness
+# pi-lamboy-harness
 
-[![test](https://github.com/MuseLinn/pi-muselinn-harness/actions/workflows/test.yml/badge.svg)](https://github.com/MuseLinn/pi-muselinn-harness/actions/workflows/test.yml)
+**个人专属 Pi 编排底座** — Goal（目标生命周期/预算/队列）· Plan（计划门控）· Permission（危险操作守卫）· Ask（结构化提问）· Todo（阶段任务）· Pause（冻结检查）· TUI · Truncation（大输出溢出）。
 
-**Kimi Code-style agent orchestration for the [Pi coding agent](https://pi.dev)** — Swarm · Goal · Plan · Permission · Ask · Task · Cron · Todo · Hooks · Skills · TUI, one package that builds the features Pi deliberately skips (sub-agents, plan mode, todo, …) and aligns them with Kimi Code's subsystem behavior.
-
-Compatible with pi 0.81.x–0.83.x on macOS, Ubuntu, and Windows · Node 24/26 · CI-tested on macOS + Ubuntu + Windows.
-
-![Closed-box editor with streaming state in the top border](https://muselinn.github.io/pi-muselinn-harness/assets/img/pi-boxed-editor.png)
-
-## What is this?
-
-Pi is a focused coding agent: no sub-agents, no plan mode, no todo. This
-harness adds them — in the same style as [Kimi Code](https://www.kimi.com/code) —
-as a single install:
-
-| You want | You get |
-|---|---|
-| Parallel sub-agents | `agent_swarm` / `agent` — real `max_concurrency`, live braille-grid TUI, `run_in_background`, `/resume` |
-| Plan before execution | `enter_plan_mode` — read-only exploration, approval gate, Kimi Code permission model |
-| Stay on task | `/goal` — lifecycle, budgets, queue, completion-criterion gate |
-| Freeze & steer | `/pause` full-screen freeze · subagent transcripts · `/steer` runtime injection |
-| Safety rails | 18-level permission chain (`auto` / `yolo` / `manual`), destructive-command + `.env` guards |
-| Work that outlives the turn | `run_background` + `cron_create` — persistent tasks and scheduled prompts |
-| The agent asks properly | `ask_user_question` — tabbed multi-question dialog with previews |
-| Task tracking | `/todo` + `todo_list` — phased plan with inline panel and reminders |
-| A nicer editor | `╭─╮ │ ╰─╯` closed-box TUI with spinner + model in the border |
-| Lifecycle automation | `[[hooks]]` engine — 16 events, blockable PreToolUse/Stop/UserPromptSubmit |
+Fork 自 [MuseLinn/pi-muselinn-harness](https://github.com/MuseLinn/pi-muselinn-harness) 0.9.22（感谢原作者）。
+个人改造路线：`plans/personal-harness-roadmap.md`。
+子代理/定时任务/搜索/MCP 由白名单第三方包提供（pi-subagents、pi-web-access、pi-mcp-adapter 等），本包只维护差异化核心。
 
 ## Quick start
 

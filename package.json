@@ -1,7 +1,7 @@
 {
-  "name": "pi-muselinn-harness",
-  "version": "0.9.22",
-  "description": "Kimi Code-style agent orchestration harness for Pi coding agent — Swarm (concurrent subagents + braille TUI), Goal (lifecycle + budget + queue), Plan (plan mode + tool restrictions), Permission (18-level policy chain: auto/yolo/manual), Task (background + cron), Hooks (config.toml [[hooks]] engine: 16 events, blockable PreToolUse/Stop/UserPromptSubmit), Skills (pi-native seven-scope scanner), TUI (Kimi-style boxed editor chrome: plain/boxed/compact + /tui + render timing probe)",
+  "name": "pi-lamboy-harness",
+  "version": "0.10.0",
+  "description": "Personal pi harness — Goal lifecycle, Plan gate, Permission guards, Ask, Todo, Pause, TUI, Truncation. Built for long-running autonomous exploration, focused optimization, large-repo maintenance, and academic writing.",
   "type": "module",
   "main": "index.ts",
   "scripts": {
@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "version-patch": "npm version patch --no-git-tag-version"
   },
-  "author": "MuseLinn",
+  "author": "leliyliu",
   "license": "MIT",
   "pi": {
     "extensions": [
@@ -40,29 +40,20 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MuseLinn/pi-muselinn-harness.git"
+    "url": "git+https://github.com/leliyliu/pi-lamboy-harness.git"
   },
   "keywords": [
     "pi-package",
     "pi-extension",
     "pi",
-    "swarm",
     "goal",
     "plan",
     "permission",
-    "hooks",
-    "subagent",
-    "agent",
-    "concurrent",
-    "batch",
-    "parallel",
-    "orchestration",
-    "kimi-code",
-    "auto-mode",
-    "yolo-mode",
-    "braille",
+    "todo",
+    "ask",
     "tui",
-    "lifecycle"
+    "truncation",
+    "personal-harness"
   ],
   "dependencies": {
     "typebox": "^1.3.3"
