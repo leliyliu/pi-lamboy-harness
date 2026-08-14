@@ -39,7 +39,6 @@ export const READ_ONLY_TOOLS = new Set([
   'read_media_file', 'read_media',
   'task_list', 'task_output',
   'cron_list',
-  'agent_file_list', 'agent_file_info',
   'todo_list',
   'enter_plan_mode', 'exit_plan_mode',
   'skill',

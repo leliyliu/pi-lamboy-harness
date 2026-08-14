@@ -111,7 +111,6 @@ check("plan mode blocks task_stop", planManager.shouldBlockTool("task_stop") ===
 check("plan mode blocks cron_create", planManager.shouldBlockTool("cron_create") === true);
 check("plan mode blocks cron_delete", planManager.shouldBlockTool("cron_delete") === true);
 check("plan mode allows cron_list", planManager.shouldBlockTool("cron_list") === false);
-check("plan mode allows agent_file_list", planManager.shouldBlockTool("agent_file_list") === false);
 check("plan mode blocks write to non-plan file", planManager.shouldBlockTool("write", "/tmp/foo.txt") === true);
 // Write to the active plan file is allowed (exact path match)
 const currentPlan = planManager.getCurrentPlan();

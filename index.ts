@@ -52,7 +52,6 @@ import { approvalTitleFor } from "./packages/core/ask/types";
 import { shouldTruncate, truncationPathFor, buildTruncatedPreview, truncationThresholdFor } from "./packages/core/truncation/index";
 import { registerTodoList, registerTodoReminders, bindTodoSession, clearTodoSession, restoreTodos, rt, persist, refreshWidget, togglePanel, syncTodoAutoClearTimer } from "./todo/index";
 import { phasesToMarkdown, markdownToPhases, applyOp, TodoPhase, TodoItem } from "./packages/core/todo/types";
-import { listDiscoverableSkillFiles } from "./packages/core/skills";
 import { registerTui, setTuiBadgeProvider } from "./tui/index";
 import { agentPauseGate } from "./packages/core/pause/gate";
 import { registerPauseCommands } from "./pause/commands";
@@ -64,8 +63,6 @@ import shared from "./state";
 let mainSessionDir = path.join(os.tmpdir(), "pi-muselinn-harness");
 
 // 0.29.0 feature imports
-import { agentFileService, findProjectRoot } from "./packages/core/agent-file/index.ts";
-import type { AgentProfile } from "./packages/core/agent-file/types.ts";
 import { toolPolicyService } from "./packages/core/tool-policy/index.ts";
 import { agentLifecycle } from "./packages/core/agent-lifecycle/index.ts";
 
@@ -111,7 +108,6 @@ async function runSwarmInBackground(
   ctx: any,
   maxC: number,
   outputPath?: string,
-  agentProfile?: AgentProfile,
 ): Promise<void> {
   const controller = new AbortController();
   // task_stop flips the entry status to "aborted"; poll and translate that
@@ -131,7 +127,7 @@ async function runSwarmInBackground(
       await runSubAgent(task, ctx, controller.signal, () => {
         const d = tasks.filter((t) => t.status === "done").length;
         backgroundManager.appendOutput(bgId, [`progress: ${d}/${tasks.length} done`]);
-      }, agentProfile);
+      }, );
     });
 
     // stop() already flipped the entry to "aborted" — leave it as-is.
@@ -174,22 +170,6 @@ async function runSwarmInBackground(
 const GOAL_ENTRY_TYPE = "muselinn_goal";
 
 export default function (pi: ExtensionAPI) {
-  // ── Main-session skills: expose Kimi Code-style skills directories
-  //    (.kimi-code/skills, ~/.pi/skills — the dirs pi does NOT scan
-  //    natively) via resources_discover. listDiscoverableSkillFiles
-  //    returns individual SKILL.md files with names already provided by
-  //    pi-native dirs filtered out, so no collision diagnostics. ──
-  try {
-    pi.on("resources_discover", async (event: { cwd: string }) => {
-      try {
-        const skillPaths = [...listDiscoverableSkillFiles(event.cwd || process.cwd())];
-        return skillPaths.length > 0 ? { skillPaths } : undefined;
-      } catch {
-        return undefined;
-      }
-    });
-  } catch { /* older pi without resources_discover — subagent path still works */ }
-
   // ── Goal persistence: save on every change ──
   // Note: pi/ctx go stale after session replacement (newSession/fork/reload
   // or process teardown in pi -p). Persistence callbacks may fire from
@@ -399,17 +379,6 @@ export default function (pi: ExtensionAPI) {
       }
     } catch { /* not critical */ }
 
-    // ── Agent File Catalog: discover custom agent files for this session ──
-    try {
-      const { profiles, errors } = agentFileService.discover(ctx.cwd);
-      if (profiles.length > 0) {
-        console.log(`[agent-file] Discovered ${profiles.length} agent profile(s)`);
-      }
-      if (errors.length > 0) {
-        console.warn(`[agent-file] Discovery errors:`, errors);
-      }
-    } catch { /* non-critical */ }
-
     // ── Agent lifecycle tracking reset ──
     try { agentLifecycle.reset(); } catch { /* ok */ }
   });
@@ -567,7 +536,6 @@ export default function (pi: ExtensionAPI) {
   registerAskUserQuestion(pi);
   registerTodoList(pi);
   registerTodoReminders(pi);
-  registerAgentFileTools(pi);
   goalManager.registerCommands(pi);
 
   // ── Register plan tools and commands (from plan/ module) ──
@@ -762,7 +730,6 @@ export default function (pi: ExtensionAPI) {
       "For multi-model swarms, use model_map to assign different models per item (e.g., \"0\": \"opencode-go:deepseek-v4-flash\", \"1\": \"xiaomi:mimo-v2.5\").",
       "When uncertain which model is best, call ask_user_question to let the user choose — then pass their response as model/model_map.",
       "For image/multimodal tasks, the system automatically prefers multimodal-capable models.",
-      "Use agent_file to apply a custom agent profile (from agent_file_list) — it overrides the system prompt and applies tool/subagent restrictions.",
     ],
     parameters: Type.Object({
       description: Type.String({ description: "Swarm name for display" }),
@@ -810,9 +777,6 @@ export default function (pi: ExtensionAPI) {
           description: "Only with run_in_background: write the final swarm report to this file (page through it with Read offset/limit).",
         }),
       ),
-      agent_file: Type.Optional(Type.String({
-        description: "Name of a custom agent profile (from agent_file_list) to use for all agents in the swarm. Overrides system prompt and applies tool/subagent restrictions.",
-      })),
     }),
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
@@ -985,23 +949,6 @@ export default function (pi: ExtensionAPI) {
         });
       }
 
-      // ── Agent profile resolution ──
-      let agentProfile: AgentProfile | undefined;
-      const agentFileName = params.agent_file as string | undefined;
-      if (agentFileName) {
-        agentProfile = agentFileService.getProfile(agentFileName);
-        if (!agentProfile) {
-          return { content: [{ type: "text", text: `Agent profile "${agentFileName}" not found. Use agent_file_list to see available profiles.` }], details: undefined };
-        }
-        // Apply tool gating from agent profile to all tasks
-        if (agentProfile.tools || agentProfile.disallowedTools) {
-          toolPolicyService.setProfilePolicy({
-            tools: agentProfile.tools,
-            disallowedTools: agentProfile.disallowedTools,
-          });
-        }
-      }
-
       // Init swarm state ------------------------------------------------------
       const state: SwarmState = {
         name: params.description,
@@ -1041,7 +988,7 @@ export default function (pi: ExtensionAPI) {
         state.status = "running";
         // Fire-and-forget: progress lands in the task entry, the final
         // report in the entry (and optionally in output_path).
-        void runSwarmInBackground(bgId, state, tasks, ctx, maxC, outputPath, agentProfile);
+        void runSwarmInBackground(bgId, state, tasks, ctx, maxC, outputPath);
         return {
           content: [{
             type: "text",
@@ -1131,7 +1078,7 @@ export default function (pi: ExtensionAPI) {
           const combinedSignal = AbortSignal.any?.(
             [signal, swarmState.globalAbortController?.signal].filter(Boolean) as AbortSignal[],
           ) ?? signal;
-          await runSubAgent(task, { ...ctx, sessionDir: mainSessionDir }, combinedSignal, updateProgress, agentProfile);
+          await runSubAgent(task, { ...ctx, sessionDir: mainSessionDir }, combinedSignal, updateProgress);
         }, { initialBatch: Math.min(5, maxC), spacingMs: 700 });
       } finally {
         // Clean up global abort controller
@@ -1237,7 +1184,6 @@ export default function (pi: ExtensionAPI) {
       "Model routing is automatic: if you don't specify 'model', the system picks the best model based on task type, current session model, and available capabilities.",
       "If the user mentions a specific model name, pass it via the 'model' parameter.",
       "When uncertain which model to use, call ask_user_question to let the user choose.",
-      "Use agent_file to apply a custom agent profile (from agent_file_list) — it overrides the system prompt and applies tool/subagent restrictions.",
     ],
     parameters: Type.Object({
       prompt: Type.String({ description: "Task prompt" }),
@@ -1251,9 +1197,6 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
       model: Type.Optional(Type.String()),
-      agent_file: Type.Optional(Type.String({
-        description: "Name of a custom agent profile (from agent_file_list) to use for this sub-agent. Overrides system prompt and applies tool/subagent restrictions.",
-      })),
     }),
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
@@ -1328,23 +1271,6 @@ export default function (pi: ExtensionAPI) {
         return { content: [{ type: "text", text: "No models available." }], details: undefined };
       }
 
-      // ── Agent profile resolution ──
-      let agentProfile: AgentProfile | undefined;
-      const agentFileName = params.agent_file as string | undefined;
-      if (agentFileName) {
-        agentProfile = agentFileService.getProfile(agentFileName);
-        if (!agentProfile) {
-          return { content: [{ type: "text", text: `Agent profile "${agentFileName}" not found. Use agent_file_list to see available profiles.` }], details: undefined };
-        }
-        // Apply tool gating from agent profile
-        if (agentProfile.tools || agentProfile.disallowedTools) {
-          toolPolicyService.setProfilePolicy({
-            tools: agentProfile.tools,
-            disallowedTools: agentProfile.disallowedTools,
-          });
-        }
-      }
-
       // No more scoring code below this point
 
       const task: SubAgentTask = {
@@ -1416,7 +1342,7 @@ export default function (pi: ExtensionAPI) {
       const update = () => updateWidget();
 
       try {
-        await runSubAgent(task, { ...ctx, sessionDir: mainSessionDir }, signal ?? new AbortController().signal, update, agentProfile);
+        await runSubAgent(task, { ...ctx, sessionDir: mainSessionDir }, signal ?? new AbortController().signal, update);
       } finally {
         // Clean up refresh timer
         if (refreshTimer) {
@@ -1495,75 +1421,6 @@ export default function (pi: ExtensionAPI) {
   // ============================================================
   // Interactive Tools (rpiv-ask-user-question provides ask_user_question)
   // ============================================================
-}
-
-// ============================================================
-// Agent File Tools
-// ============================================================
-function registerAgentFileTools(pi: ExtensionAPI): void {
-  // ── agent_file_list: list discovered agent profiles ──
-  pi.registerTool({
-    name: "agent_file_list",
-    label: "Agent File List",
-    description: "List all discovered custom agent profiles from agent files (.md).",
-    promptSnippet: "agent_file_list — list available custom agent profiles",
-    promptGuidelines: [
-      "Use agent_file_list to see what custom agent profiles are available in the project.",
-      "Profiles are loaded from .pi/agents/, .kimi-code/agents/, and .agents/agents/ directories.",
-      "Each profile has a name, description, and optional tool/subagent restrictions.",
-    ],
-    parameters: Type.Object({}),
-    async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
-      const profiles = agentFileService.getAllProfiles();
-      if (profiles.length === 0) {
-        return { content: [{ type: "text", text: "No custom agent profiles found." }], details: undefined };
-      }
-      const lines = profiles.map((p) => {
-        const tools = p.tools ? ` tools=[${p.tools.join(",")}]` : "";
-        const disallowed = p.disallowedTools ? ` disallowed=[${p.disallowedTools.join(",")}]` : "";
-        const subagents = p.subagents ? ` subagents=[${p.subagents.join(",")}]` : "";
-        return `  ${p.name} — ${p.description}${tools}${disallowed}${subagents} (${p.source})`;
-      });
-      return { content: [{ type: "text", text: `Agent profiles:\n${lines.join("\n")}` }], details: undefined };
-    },
-  });
-
-  // ── agent_file_info: inspect a specific agent profile ──
-  pi.registerTool({
-    name: "agent_file_info",
-    label: "Agent File Info",
-    description: "Show full details of a specific agent profile.",
-    promptSnippet: "agent_file_info — details of a specific agent profile",
-    parameters: Type.Object({
-      name: Type.String({ description: "Agent profile name (from agent_file_list)" }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const profile = agentFileService.getProfile(params.name as string);
-      if (!profile) {
-        return { content: [{ type: "text", text: `Agent profile "${params.name}" not found.` }], details: undefined };
-      }
-      const tools = profile.tools ? `\n  Allowed tools: ${profile.tools.join(", ")}` : "";
-      const disallowed = profile.disallowedTools ? `\n  Disallowed tools: ${profile.disallowedTools.join(", ")}` : "";
-      const subagents = profile.subagents ? `\n  Subagent types: ${profile.subagents.join(", ")}` : "";
-      const src = profile.sourcePath ? `\n  Source: ${profile.sourcePath}` : "";
-      return {
-        content: [{
-          type: "text",
-          text: [
-            `Agent: ${profile.name}`,
-            `Description: ${profile.description}`,
-            `Scope: ${profile.source}`,
-            tools,
-            disallowed,
-            subagents,
-            src,
-            `\nSystem prompt:\n${"─".repeat(40)}\n${profile.systemPrompt.slice(0, 1000)}`,
-          ].join(""),
-        }],
-        details: undefined,
-      };
-    },
-  });
 }
 
 // ── /todo slash command ────────────────────────────────────────

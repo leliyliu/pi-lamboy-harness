@@ -23,7 +23,6 @@ import {
 import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadSkillsForCwd } from "../packages/core/skills/index";
 import { getProfile } from "../packages/core/profile/profiles.ts";
 import { getProfilePrompt } from "../packages/core/profile/tool-builder.ts";
 import {
@@ -579,8 +578,9 @@ export function createSubagentResourceLoader(ctx: any, profileName?: string): an
       errors: [],
       ...(createExtRuntime ? { runtime: createExtRuntime() } : {}),
     }),
-    // Kimi Code-style Agent Skills (project + user scopes) for background tasks.
-    getSkills: () => loadSkillsForCwd(ctx?.cwd || process.cwd()) as { skills: any[]; diagnostics: any[] },
+    // Skills are provided natively by pi's own scanner; the harness no longer
+    // ships a Kimi-compat skills module (removed).
+    getSkills: () => ({ skills: [], diagnostics: [] }),
     getPrompts: () => ({ prompts: [], diagnostics: [] }),
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),

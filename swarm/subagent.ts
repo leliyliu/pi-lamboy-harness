@@ -18,8 +18,6 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { SubAgentType, SubAgentTask } from "../packages/core/swarm/types";
 import { swarmState, setSwarmCancelled, setResumeResult, clearResumeResults, MAX_OUTPUT_LINES, OUTPUT_TRUNCATED_MARKER } from "../packages/core/swarm/types";
-import { loadSkillsForCwd } from "../packages/core/skills/index";
-import type { AgentProfile } from "../packages/core/agent-file/types.ts";
 import { toolPolicyService } from "../packages/core/tool-policy/index.ts";
 import { getProfile } from "../packages/core/profile/profiles.ts";
 import { buildProfileTools, getProfilePrompt } from "../packages/core/profile/tool-builder.ts";
@@ -122,23 +120,11 @@ function combineAbortSignals(signals: AbortSignal[]): { signal: AbortSignal; cle
 export function createSubagentResourceLoader(ctx: {
   getSystemPrompt?: () => string | undefined;
   cwd: string;
-  /** Optional agent profile — overrides system prompt with profile's prompt template. */
-  agentProfile?: AgentProfile;
   /** Profile tool definition — injects roleAdditional prompt into subagent system prompt. */
   profileName?: string;
 }): ResourceLoader {
-  // Use agent profile's system prompt when provided (with ${base_prompt} expansion)
-  let basePrompt: string;
-  if (ctx.agentProfile?.systemPrompt) {
-    basePrompt = ctx.agentProfile.systemPrompt;
-    // Replace ${base_prompt} with the session's default prompt
-    const sessionPrompt = ctx.getSystemPrompt?.() || "";
-    if (basePrompt.includes("${base_prompt}") && sessionPrompt) {
-      basePrompt = basePrompt.replace(/\$\{base_prompt\}/g, sessionPrompt);
-    }
-  } else {
-    basePrompt = ctx.getSystemPrompt?.() || "";
-  }
+  // Use the session's default system prompt
+  let basePrompt: string = ctx.getSystemPrompt?.() || "";
   const systemPrompt = basePrompt
     .replace(/\nCurrent date and time:[^\n]*(?:\nCurrent working directory:[^\n]*)?$/u, "")
     .replace(/\nCurrent working directory:[^\n]*$/u, "")
@@ -166,8 +152,9 @@ export function createSubagentResourceLoader(ctx: {
 
   return {
     getExtensions: () => extensionsResult,
-    // Kimi Code-style Agent Skills (project + user scopes) for subagent sessions.
-    getSkills: () => loadSkillsForCwd(ctx.cwd || process.cwd()) as { skills: any[]; diagnostics: any[] },
+    // Skills are provided natively by pi's own scanner; the harness no longer
+    // ships a Kimi-compat skills module (removed).
+    getSkills: () => ({ skills: [], diagnostics: [] }),
     getPrompts: () => ({ prompts: [], diagnostics: [] }),
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),
@@ -269,8 +256,6 @@ export async function runSubAgent(
   },
   signal: AbortSignal,
   onProgress: () => void,
-  /** Optional agent profile to apply tool gating and custom system prompt. */
-  agentProfile?: AgentProfile,
 ): Promise<void> {
   const agentId = task.id;
   const agentType = task.type;
@@ -282,7 +267,7 @@ export async function runSubAgent(
   const profileName = task.type === "coder" || task.type === "explore" || task.type === "plan"
     ? task.type
     : "coder";
-  const resourceLoader = createSubagentResourceLoader({ ...ctx, agentProfile, profileName });
+  const resourceLoader = createSubagentResourceLoader({ ...ctx, profileName });
   const models = ctx.modelRegistry.getAvailable();
   // Build the tool array from the profile definition. Each profile
   // declares its tool allowlist; the builder maps known tool names to

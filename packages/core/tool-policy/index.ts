@@ -10,13 +10,9 @@ import { isToolActiveComposed, findInvalidToolPatterns } from "./evaluate.ts";
 /** Default known tool set for validation (harness core tools). */
 const KNOWN_TOOLS = new Set([
   "read", "grep", "glob", "write", "edit", "bash",
-  "agent", "agent_swarm",
   "ask_user_question",
   "todo_list", "create_goal", "get_goal", "set_goal_budget", "update_goal",
-  "task_list", "task_output", "task_stop",
-  "cron_create", "cron_delete", "cron_list",
   "web_search", "fetch_content",
-  "agent_file_list", "agent_file_info",
   "enter_plan_mode", "exit_plan_mode",
 ]);
 
