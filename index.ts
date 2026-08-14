@@ -47,7 +47,6 @@ import { permissionManager, approvalViaRpcUi } from "./packages/core/permission"
 import { registerPermissionCommands } from "./packages/core/permission/commands";
 import { backgroundManager, registerBackgroundTools } from "./task";
 import { cronManager, registerCronTools } from "./packages/core/task/cron";
-import { registerHooks, hookEngine } from "./packages/core/hooks/index";
 import { registerAskUserQuestion, showQuestionDialog } from "./ask/index";
 import { approvalTitleFor } from "./packages/core/ask/types";
 import { shouldTruncate, truncationPathFor, buildTruncatedPreview, truncationThresholdFor } from "./packages/core/truncation/index";
@@ -175,10 +174,6 @@ async function runSwarmInBackground(
 const GOAL_ENTRY_TYPE = "muselinn_goal";
 
 export default function (pi: ExtensionAPI) {
-  // ── Hooks engine: wire all pi events (input/tool_result/agent_settled/
-  //    turn_end/session_*) before anything else so hooks observe every event ──
-  try { registerHooks(pi); } catch { /* hooks must never break extension load */ }
-
   // ── Main-session skills: expose Kimi Code-style skills directories
   //    (.kimi-code/skills, ~/.pi/skills — the dirs pi does NOT scan
   //    natively) via resources_discover. listDiscoverableSkillFiles
@@ -594,20 +589,6 @@ export default function (pi: ExtensionAPI) {
     await agentPauseGate.waitUntilResumed(undefined, "tool_call");
     const toolName = event.toolName || "";
     const input = (event.input ?? {}) as Record<string, unknown>;
-
-    // Hooks: PreToolUse — Kimi Code runs hooks before permission checks.
-    try {
-      const hookResult = await hookEngine.fire(
-        "PreToolUse",
-        { tool_name: toolName, tool_input: input, tool_call_id: (event as any).toolCallId },
-        { blockable: true, matcherText: toolName, cwd: ctx?.cwd },
-      );
-      if (hookResult.blocked) {
-        const reason = hookResult.reasons.join("; ") || "Blocked by hook";
-        try { ctx.ui.notify(`Blocked by hook: ${reason}`, "warning"); } catch { /* ok */ }
-        return { block: true, reason };
-      }
-    } catch { /* hook failures fail open */ }
 
     const filePath = (input.file_path as string) || (input.path as string) || "";
     // Bash command string — forwarded to plan-mode gate so the read-only

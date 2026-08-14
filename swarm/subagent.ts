@@ -18,7 +18,6 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { SubAgentType, SubAgentTask } from "../packages/core/swarm/types";
 import { swarmState, setSwarmCancelled, setResumeResult, clearResumeResults, MAX_OUTPUT_LINES, OUTPUT_TRUNCATED_MARKER } from "../packages/core/swarm/types";
-import { hookEngine } from "../packages/core/hooks/index";
 import { loadSkillsForCwd } from "../packages/core/skills/index";
 import type { AgentProfile } from "../packages/core/agent-file/types.ts";
 import { toolPolicyService } from "../packages/core/tool-policy/index.ts";
@@ -276,7 +275,6 @@ export async function runSubAgent(
   const agentId = task.id;
   const agentType = task.type;
   agentLifecycle.emit({ type: "agent.created", agentId, agentType, parentToolCallId: task.id });
-  try { void hookEngine.fire("SubagentStart", { subagent_type: task.type, task_id: task.id }, { matcherText: task.type, cwd: ctx.cwd }); } catch { /* hooks fail open */ }
   try {
   // Kimi Code-aligned subagent profiles: tools and role prompt are
   // driven by the task type (coder / explore / plan). Falls back to
@@ -330,7 +328,6 @@ export async function runSubAgent(
 
   await runWithModel(model, task, ctx, resourceLoader, gatedTools, signal, onProgress);
   } finally {
-    try { void hookEngine.fire("SubagentStop", { subagent_type: task.type, task_id: task.id, status: task.status }, { matcherText: task.type, cwd: ctx.cwd }); } catch { /* hooks fail open */ }
     agentLifecycle.emit({ type: "agent.disposed", agentId, agentType, parentToolCallId: task.id, status: task.status });
   }
 }

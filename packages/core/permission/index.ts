@@ -6,7 +6,6 @@ import type { PermissionMode, PolicyContext, PolicyResult } from './types.ts';
 import { setMode, sessionApprovals } from './types.ts';
 import { policyChain, isDestructive, inputFingerprint } from './policies.ts';
 import { loadAgentsMd, loadDefaultMode } from './config.ts';
-import { hookEngine } from '../hooks/index.ts';
 import { toolPolicyService } from '../tool-policy/index.ts';
 
 /** Adapter-injected approval dialog outcome. */
@@ -136,11 +135,9 @@ export class PermissionManager {
                 `Do not treat the action as completed. Ask the user to run interactively or switch permission mode (auto/yolo).`,
             };
           }
-          try { void hookEngine.fire('PermissionRequest', { tool_name: toolName, policy: policy.name, message: result.message }, { matcherText: toolName, cwd }); } catch { /* hooks fail open */ }
 
           if (this.approvalDialog) {
             const outcome = await this.approvalDialog(ctx, toolName, 'Approval Required', result.message || `Tool: ${toolName}`);
-            try { void hookEngine.fire('PermissionResult', { tool_name: toolName, policy: policy.name, approved: outcome.decision !== 'deny' }, { matcherText: toolName, cwd }); } catch { /* hooks fail open */ }
             if (outcome.decision === 'deny') {
               const why = outcome.reason ? ` — user reason: ${outcome.reason}` : '';
               return { block: true, reason: `User denied: ${policy.name}${why}` };
@@ -155,7 +152,6 @@ export class PermissionManager {
             result.message || `Tool: ${toolName}\n\nAllow?`,
             { signal: ctx?.signal }
           );
-          try { void hookEngine.fire('PermissionResult', { tool_name: toolName, policy: policy.name, approved: !!approved }, { matcherText: toolName, cwd }); } catch { /* hooks fail open */ }
           if (!approved) {
             return { block: true, reason: `User denied: ${policy.name}` };
           }
