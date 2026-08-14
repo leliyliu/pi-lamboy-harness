@@ -23,8 +23,6 @@ function generatePlanId(): string {
 // mode (auto/yolo/manual).
 // Only the following are blocked during plan mode:
 //   - Write/Edit to files OUTSIDE the plan file (plan file is allowed)
-//   - TaskStop (would abort running background work during planning)
-//   - CronCreate/CronDelete (would mutate scheduled work)
 // Everything else passes through to the permission policy chain.
 // ============================================================
 
@@ -401,7 +399,6 @@ export class PlanManager {
    * - Edits are restricted to the current plan file unless a tool request
    *   is explicitly approved.
    * - Bash is NOT banned — it follows the normal permission mode and rules.
-   * - TaskStop, CronCreate, CronDelete are blocked in plan mode.
    * - Turns must end with ask_user_question or exit_plan_mode.
    */
   buildInjection(sparse = false): string | undefined {
@@ -426,7 +423,7 @@ export class PlanManager {
     const parts = [
       `## Plan Mode Active`,
       ``,
-      `Plan mode is active. You MUST NOT make any edits (with the exception of the current plan file) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received. TaskStop, CronCreate, and CronDelete are also blocked in plan mode — call exit_plan_mode first if you need them.`,
+      `Plan mode is active. You MUST NOT make any edits (with the exception of the current plan file) or otherwise make changes to the system unless a tool request is explicitly approved. Prefer read-only tools. Use Bash only when needed; Bash follows the normal permission mode and rules. This supersedes any other instructions you have received.`,
       ``,
       `Workflow:`,
       `  1. Understand — explore the codebase with read, grep, find, ls.`,
