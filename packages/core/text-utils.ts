@@ -1,13 +1,13 @@
 // ============================================================
 // Text utilities (pure, no host imports) — shared by core modules
-// that measure or cut terminal text (swarm grid, tui box borders).
+// that measure or cut terminal text (tui box borders, pause overlay).
 // ============================================================
 
 /**
  * Visible terminal width of a string: SGR escape sequences count as 0,
  * CJK ideographs and CJK punctuation count as 2 columns, everything
- * else as 1. Matches the layout math used across the swarm grid and
- * the boxed editor borders.
+ * else as 1. Matches the layout math used across the boxed editor
+ * borders and the pause overlay.
  */
 export function visibleWidth(s: string): number {
   let w = 0;

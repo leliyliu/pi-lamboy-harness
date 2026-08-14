@@ -19,15 +19,6 @@ export interface MusepiTodoSettings {
 	maxVisible?: number; // default: 5
 }
 
-export interface MusepiSwarmSettings {
-	/** Default max_concurrency when the model does not specify it. */
-	maxConcurrency?: number; // default: 5
-	/** Default subagent timeout in ms. */
-	timeoutMs?: number; // default: 1800000 (30 min)
-	/** Default model tier when unspecified. */
-	modelTier?: "cheap" | "balanced" | "premium" | "auto"; // default: "auto"
-}
-
 export interface MusepiTuiSettings {
 	/** Editor chrome style. */
 	style?: "plain" | "boxed" | "compact"; // default: "boxed"
@@ -46,7 +37,6 @@ export interface MusepiTruncationSettings {
 export interface MusepiSettings {
 	goal?: MusepiGoalSettings;
 	todo?: MusepiTodoSettings;
-	swarm?: MusepiSwarmSettings;
 	tui?: MusepiTuiSettings;
 	truncation?: MusepiTruncationSettings;
 }
@@ -55,13 +45,11 @@ export interface MusepiSettings {
 export const MUSEPI_DEFAULTS: Required<{
 	goal: Required<MusepiGoalSettings>;
 	todo: Required<MusepiTodoSettings>;
-	swarm: Required<MusepiSwarmSettings>;
 	tui: Required<MusepiTuiSettings>;
 	truncation: Required<MusepiTruncationSettings>;
 }> = {
 	goal: { badge: true },
 	todo: { maxVisible: 5 },
-	swarm: { maxConcurrency: 5, timeoutMs: 1_800_000, modelTier: "auto" },
 	tui: { style: "boxed", modelInBorder: false },
 	truncation: { thresholdChars: 40_000, headChars: 1_500, tailChars: 500 },
 };
@@ -90,7 +78,6 @@ export function mergeMusepiSettings(raw: MusepiSettings | undefined): ResolvedMu
 	return {
 		goal: pick(MUSEPI_DEFAULTS.goal, r.goal),
 		todo: pick(MUSEPI_DEFAULTS.todo, r.todo),
-		swarm: pick(MUSEPI_DEFAULTS.swarm, r.swarm),
 		tui: pick(MUSEPI_DEFAULTS.tui, r.tui),
 		truncation: pick(MUSEPI_DEFAULTS.truncation, r.truncation),
 	};
@@ -100,9 +87,6 @@ export function mergeMusepiSettings(raw: MusepiSettings | undefined): ResolvedMu
 export const MUSEPI_SETTINGS_DOCS: Array<{ key: string; description: string; defaultValue: unknown }> = [
 	{ key: "goal.badge", description: "Show the goal badge in the footer", defaultValue: true },
 	{ key: "todo.maxVisible", description: "Max rows in the folded todo panel", defaultValue: 5 },
-	{ key: "swarm.maxConcurrency", description: "Default parallel workers for agent_swarm", defaultValue: 5 },
-	{ key: "swarm.timeoutMs", description: "Subagent timeout in milliseconds", defaultValue: 1_800_000 },
-	{ key: "swarm.modelTier", description: "Default model tier for subagents", defaultValue: "auto" },
 	{ key: "tui.style", description: "Editor chrome style (plain/boxed/compact)", defaultValue: "boxed" },
 	{ key: "tui.modelInBorder", description: "Show model name in the editor top border", defaultValue: false },
 	{ key: "truncation.thresholdChars", description: "Tool-result spill threshold (chars)", defaultValue: 40_000 },

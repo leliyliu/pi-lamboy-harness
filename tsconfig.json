@@ -12,15 +12,10 @@
   },
   "include": [
     "index.ts",
-    "state.ts",
     "notify-augment.d.ts",
     "packages/**/*.ts",
     "ask/**/*.ts",
     "todo/**/*.ts",
-    "webfetch/**/*.ts",
-    "plugin/**/*.ts",
-    "swarm/**/*.ts",
-    "task/**/*.ts",
     "tui/**/*.ts",
     "pause/**/*.ts"
   ]

@@ -10,14 +10,14 @@ function check(name, cond, extra = "") {
 // 1. undefined → full defaults
 {
   const r = mergeMusepiSettings(undefined);
-  check("undefined → defaults", r.todo.maxVisible === 5 && r.goal.badge === true && r.swarm.timeoutMs === 1_800_000);
+  check("undefined → defaults", r.todo.maxVisible === 5 && r.goal.badge === true && r.tui.style === "boxed");
 }
 
 // 2. partial override merges per field
 {
   const r = mergeMusepiSettings({ todo: { maxVisible: 8 }, tui: { style: "compact" } });
   check("override applied", r.todo.maxVisible === 8 && r.tui.style === "compact");
-  check("others defaulted", r.goal.badge === true && r.tui.modelInBorder === false && r.swarm.maxConcurrency === 5);
+  check("others defaulted", r.goal.badge === true && r.tui.modelInBorder === false && r.todo.maxVisible === 8);
 }
 
 // 3. mistyped values fall back to defaults
@@ -35,8 +35,8 @@ function check(name, cond, extra = "") {
 
 // 5. non-object section ignored
 {
-  const r = mergeMusepiSettings({ swarm: "lots" });
-  check("non-object section → defaults", r.swarm.maxConcurrency === 5 && r.swarm.modelTier === "auto");
+  const r = mergeMusepiSettings({ tui: "lots" });
+  check("non-object section → defaults", r.tui.style === "boxed" && r.tui.modelInBorder === false);
 }
 
 // 6. docs cover every defaults field

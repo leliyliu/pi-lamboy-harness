@@ -8,7 +8,6 @@
 
 import {
   todoMatchesAnyDescription,
-  setActiveTodoDescriptionsProvider,
   getActiveTodoDescriptions,
   type TodoItem,
   type TodoPhase,
@@ -32,7 +31,6 @@ import {
   hasOpenTasks,
   removeClosedTasks,
 } from "../packages/core/todo/types";
-import { swarmState } from "../packages/core/swarm/types";
 
 // ── Platform-aware key label ───────────────────────────────────
 const EXPAND_KEY = "/todo toggle";
@@ -373,15 +371,6 @@ export function registerTodoList(pi: any): void {
 
   // ${EXPAND_KEY} toggles the panel's expanded view (ctrl+t is pi built-in thinking toggle).
 
-  // Wire default subagent descriptions provider to swarm state
-  setActiveTodoDescriptionsProvider(() => {
-    const tasks = swarmState.currentSwarm?.tasks;
-    if (!tasks) return [];
-    return tasks
-      .filter((t) => t.status === "running" || t.status === "pending")
-      .map((t) => t.task ?? "")
-      .filter(Boolean);
-  });
   pi.on("tool_result", () => { refreshWidget(); });
   pi.on("agent_start", () => { refreshWidget(); });
   pi.on("agent_end", () => { refreshWidget(); });

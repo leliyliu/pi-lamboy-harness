@@ -1,8 +1,7 @@
 // TUI state visualization unit tests (pure, no pi runtime, no model quota).
 // Covers: command argument completions (prefix filter / empty fallback /
-// multi-token budget units), task-list overflow collapse, and the pure
-// key routers. Uses the same jiti.transform CJS loader as
-// tests/permission.test.mjs.
+// multi-token budget units), spinner styles, and the keep-alive gate.
+// Uses the same jiti.transform CJS loader as tests/permission.test.mjs.
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createRequire } from "node:module";
@@ -40,7 +39,6 @@ function loadTs(file) {
 
 const EXT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
 const completions = loadTs(`${EXT}/packages/core/completions.ts`);
-const utils = loadTs(`${EXT}/packages/core/swarm/task-list-utils.ts`);
 
 let pass = 0, fail = 0;
 function check(name, cond, extra = "") {
@@ -122,21 +120,8 @@ check("goal: completed unit + space → null",
   completions.goalArgumentCompletions("budget 10 turns ") === null);
 
 // ══════════════════════════════════════════════════════════════
-// 3. /swarm, /plan, /mode completions
+// 3. /plan, /mode completions
 // ══════════════════════════════════════════════════════════════
-check("swarm: on/off/status present",
-  (() => {
-    const v = completions.swarmArgumentCompletions("").map((i) => i.value);
-    return v.includes("on") && v.includes("off") && v.includes("status");
-  })());
-check("swarm: prefix 's' → status only",
-  (() => {
-    const v = completions.swarmArgumentCompletions("s").map((i) => i.value);
-    return v.length === 1 && v[0] === "status";
-  })());
-check("swarm: no-match falls back to full list",
-  completions.swarmArgumentCompletions("zzz").length === 3);
-
 check("plan: on/off/clear present",
   (() => {
     const v = completions.planArgumentCompletions("").map((i) => i.value);
@@ -162,146 +147,10 @@ check("mode: no-match falls back to full list",
   completions.modeArgumentCompletions("zzz").length === 4);
 
 // ══════════════════════════════════════════════════════════════
-// 4. collapseTaskList — overflow collapse
+// 4. Spinner styles (harness-branded, PI_MUSELINN_SPINNER)
 // ══════════════════════════════════════════════════════════════
-const T = (id, status) => ({ id, status });
-
-check("collapse: fits → all visible, no summary",
-  (() => {
-    const r = utils.collapseTaskList([T("1", "done"), T("2", "running")], 5);
-    return r.visible.length === 2 && r.hiddenTotal === 0
-      && utils.formatCollapseSummary(r.hidden) === null;
-  })());
-
-check("collapse: exact fit boundary → no summary",
-  (() => {
-    const tasks = [T("1", "done"), T("2", "done"), T("3", "running")];
-    const r = utils.collapseTaskList(tasks, 3);
-    return r.visible.length === 3 && r.hiddenTotal === 0;
-  })());
-
-check("collapse: overflow drops done first, keeps running",
-  (() => {
-    // 4 done + 1 running, window 2 → budget 1 → only running survives
-    const tasks = [T("d1", "done"), T("d2", "done"), T("r1", "running"), T("d3", "done"), T("d4", "done")];
-    const r = utils.collapseTaskList(tasks, 2);
-    return r.visible.length === 1 && r.visible[0].id === "r1"
-      && r.hiddenTotal === 4 && r.hidden.done === 4;
-  })());
-
-check("collapse: summary format '+N more (x done, y running)'",
-  (() => {
-    const tasks = [T("d1", "done"), T("d2", "done"), T("r1", "running"), T("r2", "running"), T("p1", "pending")];
-    const r = utils.collapseTaskList(tasks, 3); // budget 2 → keep both running
-    const s = utils.formatCollapseSummary(r.hidden);
-    return r.visible.length === 2 && s === "+3 more (2 done, 1 pending)";
-  })());
-
-check("collapse: selected (keepIndex) task is force-kept",
-  (() => {
-    const tasks = [T("r1", "running"), T("r2", "running"), T("d1", "done"), T("d2", "done")];
-    const r = utils.collapseTaskList(tasks, 3, 2); // budget 2, keep the done task selected
-    const ids = r.visible.map((t) => t.id);
-    return ids.includes("d1") && r.visible.length === 2 && r.hiddenTotal === 2;
-  })());
-
-check("collapse: keepIndex alone exceeds budget → only selection visible",
-  (() => {
-    const tasks = [T("r1", "running"), T("r2", "running"), T("d1", "done")];
-    const r = utils.collapseTaskList(tasks, 2, 2); // budget 1 → only selected survives
-    return r.visible.length === 1 && r.visible[0].id === "d1" && r.hiddenTotal === 2;
-  })());
-
-check("collapse: pending kept before done, display order preserved",
-  (() => {
-    const tasks = [T("d1", "done"), T("p1", "pending"), T("d2", "done"), T("p2", "pending")];
-    const r = utils.collapseTaskList(tasks, 3); // budget 2 → both pending, in original order
-    const ids = r.visible.map((t) => t.id);
-    return ids.length === 2 && ids[0] === "p1" && ids[1] === "p2";
-  })());
-
-check("collapse: failed/aborted summarized as interrupted",
-  (() => {
-    const tasks = [T("r1", "running"), T("f1", "failed"), T("a1", "aborted")];
-    const r = utils.collapseTaskList(tasks, 2); // budget 1 → keep running
-    const s = utils.formatCollapseSummary(r.hidden);
-    return s === "+2 more (2 interrupted)";
-  })());
-
-check("collapse: maxRows 0 → everything hidden",
-  (() => {
-    const r = utils.collapseTaskList([T("1", "running")], 0);
-    return r.visible.length === 0 && r.hiddenTotal === 1;
-  })());
-
-// ══════════════════════════════════════════════════════════════
-// 5. Key routers — main browser + output viewer
-// ══════════════════════════════════════════════════════════════
-// Injected matcher: a plain lookup table standing in for pi-tui's
-// matchesKey + KeybindingsManager.
-const KEY_IDS = {
-  "up": "\x1b[A", "down": "\x1b[B", "home": "\x1b[H", "end": "\x1b[F",
-  "pageUp": "\x1b[5~", "pageDown": "\x1b[6~",
-  "escape": "\x1b", "enter": "\r", "tab": "\t",
-  "tui.select.up": "\x1b[A", "tui.select.down": "\x1b[B",
-  "tui.select.confirm": "\r", "tui.select.cancel": "\x1b",
-  "tui.select.pageUp": "\x1b[5~", "tui.select.pageDown": "\x1b[6~",
-  "q": "q", "shift+q": "Q", "k": "k", "j": "j",
-  "r": "r", "shift+r": "R", "s": "s", "shift+s": "S",
-  "o": "o", "shift+o": "O", "y": "y", "shift+y": "Y",
-  "u": "u", "d": "d", "g": "g", "shift+g": "G",
-};
-const match = (data, keyId) => KEY_IDS[keyId] === data;
-
-const route = (data, pending = false) => utils.routeBrowserKey(data, pending, match);
-
-check("keys: ↑ and k → moveUp",
-  route("\x1b[A") === "moveUp" && route("k") === "moveUp");
-check("keys: ↓ and j → moveDown",
-  route("\x1b[B") === "moveDown" && route("j") === "moveDown");
-check("keys: Esc/q/Q → cancel",
-  route("\x1b") === "cancel" && route("q") === "cancel" && route("Q") === "cancel");
-check("keys: Tab → toggleFilter", route("\t") === "toggleFilter");
-check("keys: r/R → refresh", route("r") === "refresh" && route("R") === "refresh");
-check("keys: s/S → requestStop", route("s") === "requestStop" && route("S") === "requestStop");
-check("keys: o/O/Enter → openOutput",
-  route("o") === "openOutput" && route("O") === "openOutput" && route("\r") === "openOutput");
-check("keys: unrecognized → ignore", route("z") === "ignore");
-
-check("keys: pendingStop y/Y → confirmStop",
-  route("y", true) === "confirmStop" && route("Y", true) === "confirmStop");
-check("keys: pendingStop any other key → dismissStop",
-  route("q", true) === "dismissStop" && route("\x1b", true) === "dismissStop"
-  && route("\x1b[A", true) === "dismissStop");
-
-const vroute = (data) => utils.routeViewerKey(data, match);
-check("viewer: Esc/q → close", vroute("\x1b") === "close" && vroute("q") === "close");
-check("viewer: ↑/k scrollUp, ↓/j scrollDown",
-  vroute("\x1b[A") === "scrollUp" && vroute("k") === "scrollUp"
-  && vroute("\x1b[B") === "scrollDown" && vroute("j") === "scrollDown");
-check("viewer: u/PgUp → pageUp, d/PgDn → pageDown",
-  vroute("u") === "pageUp" && vroute("\x1b[5~") === "pageUp"
-  && vroute("d") === "pageDown" && vroute("\x1b[6~") === "pageDown");
-check("viewer: g/Home → top, G/End → bottom",
-  vroute("g") === "top" && vroute("\x1b[H") === "top"
-  && vroute("G") === "bottom" && vroute("\x1b[F") === "bottom");
-check("viewer: unrecognized → ignore", vroute("z") === "ignore");
-
-// ══════════════════════════════════════════════════════════════
-// 6. Status glyphs (rpiv-todo semantics)
-// ══════════════════════════════════════════════════════════════
-check("glyphs: pending ○ / running ◐ / done ✓ / failed ✗ / aborted ▲",
-  utils.statusGlyph("pending") === "○"
-  && utils.statusGlyph("running") === "◐"
-  && utils.statusGlyph("done") === "✓"
-  && utils.statusGlyph("failed") === "✗"
-  && utils.statusGlyph("aborted") === "▲");
-
-// ══════════════════════════════════════════════════════════════
-// 7. Spinner styles (harness-branded, PI_MUSELINN_SPINNER)
-// ══════════════════════════════════════════════════════════════
-const helpers = loadTs(`${EXT}/packages/core/swarm/helpers.ts`);
-const { getSpinnerFrames, SPINNER_STYLES, DEFAULT_SPINNER_STYLE } = helpers;
+const spinner = loadTs(`${EXT}/packages/core/tui/spinner.ts`);
+const { getSpinnerFrames, SPINNER_STYLES, DEFAULT_SPINNER_STYLE, FRAME_INTERVAL_MS } = spinner;
 
 delete process.env.PI_MUSELINN_SPINNER;
 check("spinner: default style is braille",
@@ -309,6 +158,7 @@ check("spinner: default style is braille",
   && getSpinnerFrames() === SPINNER_STYLES.braille);
 check("spinner: braille frames are single-width (no emoji)",
   SPINNER_STYLES.braille.every((f) => [...f].length === 1 && f.charCodeAt(0) >= 0x2800 && f.charCodeAt(0) <= 0x28ff));
+check("spinner: frame interval is 250ms", FRAME_INTERVAL_MS === 250);
 
 process.env.PI_MUSELINN_SPINNER = "pulse";
 check("spinner: env override selects pulse",

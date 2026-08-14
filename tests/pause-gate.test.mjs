@@ -109,7 +109,6 @@ check("screen: PAUSED header", f1text.includes("⏸ PAUSED"));
 check("screen: clock 0:05", f1text.includes("paused for 0:05"));
 check("screen: body lines present", f1text.includes("主代理、子代理与顾问将在下一步暂停"));
 check("screen: resume hint present", f1text.includes("esc/enter/space/ctrl+c 释放"));
-check("screen: steer hint present", f1text.includes("/steer <taskId>"));
 // ⏸ (1 col) + " PAUSED" (7) = 8 cols -> pad = floor((100-8)/2) = 46
 check("screen: title centered", /^ {46}⏸ PAUSED/.test(strip(f1.find((s) => strip(s).includes("⏸ PAUSED")) ?? "")));
 // Icon glyph row: 5+1+5 single-width blocks + 4 gap = 14 cols -> pad = 43

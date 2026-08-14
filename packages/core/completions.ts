@@ -101,20 +101,6 @@ export function goalArgumentCompletions(prefix: string): CompletionItem[] | null
   return null;
 }
 
-// ── /swarm ────────────────────────────────────────────────────
-
-const SWARM_SUBCOMMANDS: CompletionItem[] = [
-  { value: "on", label: "on", description: "Turn swarm mode ON" },
-  { value: "off", label: "off", description: "Turn swarm mode OFF" },
-  { value: "status", label: "status", description: "Show swarm mode + resume status" },
-];
-
-export function swarmArgumentCompletions(prefix: string): CompletionItem[] | null {
-  const text = prefix || "";
-  if (/\s/.test(text.trim())) return null; // single-token command
-  return filterCompletions(SWARM_SUBCOMMANDS, text);
-}
-
 // ── /plan ─────────────────────────────────────────────────────
 
 const PLAN_SUBCOMMANDS: CompletionItem[] = [

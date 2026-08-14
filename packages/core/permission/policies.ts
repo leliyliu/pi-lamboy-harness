@@ -47,18 +47,6 @@ export function inputFingerprint(toolName: string, input: Record<string, unknown
   return `${toolName}:${JSON.stringify(input).slice(0, 200)}`;
 }
 
-// ── 01: agent-swarm-exclusive-deny ──────────────────────────────────────
-// Swarm 约束：swarm 模式下只允许 swarm 相关工具
-export const policy01SwarmDeny: Policy = {
-  id: 1,
-  name: 'agent-swarm-exclusive-deny',
-  evaluate(ctx: PolicyContext): PolicyResult | null {
-    // In swarm mode, block tools that conflict with swarm execution
-    // (This is a placeholder — actual swarm constraints depend on module state)
-    return null;
-  },
-};
-
 // ── 02: auto-mode-ask-user-question-deny ────────────────────────────────
 // auto 模式禁用 ask_user_question
 export const policy02AutoAskDeny: Policy = {
@@ -293,19 +281,6 @@ export const policy14YoloApprove: Policy = {
 };
 
 // ── 15: swarm-mode-agent-swarm-approve ──────────────────────────────────
-// swarm 工具批准
-export const policy15SwarmApprove: Policy = {
-  id: 15,
-  name: 'swarm-mode-agent-swarm-approve',
-  evaluate(ctx: PolicyContext): PolicyResult | null {
-    if (ctx.toolName === 'agent_swarm' || ctx.toolName === 'agent') {
-      return { kind: 'approve', reason: 'Swarm tool approved' };
-    }
-    return null;
-  },
-};
-
-// ── 16: default-tool-approve ────────────────────────────────────────────
 // 只读/安全工具（Read, Grep, WebSearch...）
 export const policy16DefaultApprove: Policy = {
   id: 16,
@@ -361,7 +336,6 @@ export const policy18FallbackAsk: Policy = {
 // MANUAL mode: Runs through the entire chain; fallback-ask catches anything
 //              not explicitly allowed or denied.
 export const policyChain: Policy[] = [
-  policy01SwarmDeny,
   policy02AutoAskDeny,
   policy03PlanGuard,
   policy04UserDeny,
@@ -380,7 +354,6 @@ export const policyChain: Policy[] = [
   policy11PlanToolApprove,
   // YoloApprove fires after safety checks — yolo still protects dangerous ops
   policy14YoloApprove,
-  policy15SwarmApprove,
   policy16DefaultApprove,
   policy17GitCwdWrite,
   policy18FallbackAsk,

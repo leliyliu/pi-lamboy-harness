@@ -138,9 +138,6 @@ export function renderPauseScreen(o: {
   content.push(paint(`paused for ${elapsed}`, style.muted, width));
   content.push(blank(width));
   content.push(paint("esc/enter/space/ctrl+c 释放", style.dim, width));
-  if (!compact) {
-    content.push(paint("/steer <taskId> <msg> 向子代理发消息", style.dim, width));
-  }
 
   // Vertically center the whole block; when a small terminal forces the
   // compact card, nudge slightly upward so the scene stays readable.
