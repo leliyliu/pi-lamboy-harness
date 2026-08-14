@@ -25,8 +25,6 @@ import { phasesToMarkdown, markdownToPhases, applyOp, TodoPhase, TodoItem } from
 import { registerTui, setTuiBadgeProvider } from "./tui/index";
 import { agentPauseGate } from "./packages/core/pause/gate";
 import { registerPauseCommands } from "./pause/commands";
-import { agentLifecycle } from "./packages/core/agent-lifecycle/index.ts";
-
 const GOAL_ENTRY_TYPE = "muselinn_goal";
 
 export default function (pi: ExtensionAPI) {
@@ -167,12 +165,6 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.setStatus("goal", ctx.ui.theme.fg(color, goalBadge));
     }
 
-    // Agent lifecycle badge ([3 agents running])
-    const lifecycleCount = agentLifecycle.getActiveCount();
-    ctx.ui.setStatus("lifecycle-agent-count", lifecycleCount > 0
-      ? ctx.ui.theme.fg("accent", `[${lifecycleCount} agents running]`)
-      : undefined
-    );
     // Restore the todo panel (before binding so the first refresh shows it)
     try {
       restoreTodos(ctx.sessionManager.getEntries());
@@ -203,9 +195,6 @@ export default function (pi: ExtensionAPI) {
         }
       }
     } catch { /* not critical */ }
-
-    // ── Agent lifecycle tracking reset ──
-    try { agentLifecycle.reset(); } catch { /* ok */ }
   });
 
   // ── session_shutdown: clear todo state ──
@@ -259,13 +248,6 @@ export default function (pi: ExtensionAPI) {
     } else {
       ctx.ui.setStatus("goal", undefined);
     }
-
-    // Agent lifecycle badge
-    const lifecycleCount = agentLifecycle.getActiveCount();
-    ctx.ui.setStatus("lifecycle-agent-count", lifecycleCount > 0
-      ? ctx.ui.theme.fg("accent", `[${lifecycleCount} agents running]`)
-      : undefined
-    );
   }
 
   // ── Goal badge wall-clock: 1s tick while a goal is active ──
@@ -398,7 +380,7 @@ export default function (pi: ExtensionAPI) {
       return undefined; // allowed, skip permission chain
     }
     
-    // 16-level permission policy chain
+    // permission policy chain
     const result = await permissionManager.evaluate(toolName, input, ctx.cwd || process.cwd(), ctx);
     if (result?.block) {
       ctx.ui.notify(`Blocked: ${result.reason}`, "warning");

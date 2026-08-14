@@ -10,6 +10,7 @@ Personal fork of pi-muselinn-harness 0.9.22. Breaking reduction per plans/person
 - Removed: Kimi Code compat layer shipped with those modules
 - Migrated: spinner primitives from core/swarm to core/tui
 - Kept: Goal, Plan, Permission guards, Ask (foreground), Todo, Pause, TUI, Truncation
+- Removed commands: `/swarm` `/tasks` `/cancel` `/resume` `/steer` `/plugins` `/swarm-status`; `ask_user_question` no longer accepts `background: true`
 - Docs: README (en/zh-CN) pruned to post-reduction reality; Kimi references swept (phase-1 scope)
 
 ## 0.9.22

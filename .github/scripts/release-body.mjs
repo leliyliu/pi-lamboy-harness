@@ -41,8 +41,8 @@ ${section}
 ## Install
 
 \`\`\`bash
-pi install npm:pi-muselinn-harness
-npm install pi-muselinn-harness@${version}
+pi install npm:pi-lamboy-harness
+npm install pi-lamboy-harness@${version}
 \`\`\`
 
 ## Compatibility

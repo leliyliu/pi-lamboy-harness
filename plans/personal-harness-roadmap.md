@@ -11,6 +11,7 @@
 | 2026-02-11 | §4 模块处置总表（含 Swarm 全删 3,252 行） | ✅ 已批准 |
 | 2026-02-11 | §5.3 白名单 8 包保留 / 排除 pi-agent-extensions | ✅ 已批准 |
 | 2026-02-11 | §6 自建优先级：**perf-lab 先于 latex-toolchain** | ✅ 已批准（Phase 3/4 已对调） |
+| 2026-02-11 | 终审裁定：删除 docs 站点+pages.yml；release 脚本改名；agent-lifecycle 删接线留模块 | ✅ 已执行 |
 
 ---
 
@@ -374,6 +375,10 @@ pi 原生 package 系统（`pi` manifest：extensions/skills/prompts/themes + ga
 - Permission 精简为守卫层；Plan 去 Kimi 耦合；Todo 吸收 claim/release；Pause 删 /steer
 - 排除 pi-agent-extensions（`pi remove npm:pi-agent-extensions`），验证 Ask/Todo 补位无感
 - 升级 devDeps 至 pi 0.84 并全矩阵验证
+
+**Phase 2 死代码清扫清单（终审后登记）**
+- 待清扫：`packages/core/profile/`（零生产引用）、`packages/core/config/`（仅测试引用 schema.ts）、tool-policy 休眠 setter 层（`setProfilePolicy`/`setSessionDisabled` 无生产调用方）、`permission` 的 `evaluateForSubagent`（仅测试调用）、`packages/renderer/`（test-only）、`packages/core/agent-lifecycle/`（待决定：pi-subagents 事件桥或删除）
+- muselinn 兼容命名保留清单（0.9.22 升级用户兼容，Phase 2 决定是否改名）：`muselinn-tui.json`、`PI_MUSELINN_*` 环境变量、`muselinn_goal/plan/permission/todo` entry 类型、`index.ts` 中 `pi-muselinn-harness` tmpdir 回退名
 
 **Phase 3 — 性能探索成型（~1 周，优先级提升）**
 - 自建 perf-lab（§6.2），以一个真实算子（如某 CUDA kernel 或 cpp 例程）benchmark+profile 为验收对象
