@@ -1,8 +1,16 @@
 # pi-lamboy-harness 个人专属 Packages 改造路线图
 
-> 版本：v0.1（2026-02-11）· 状态：待评审
+> 版本：v0.2（2026-02-11）· 状态：**设计已批准**
 > 基线：pi-muselinn-harness 0.9.22（commit ad969a6）· pi 0.84.1
 > 目标读者：仓库所有者（个人维护者）
+
+## 决策记录
+
+| 日期 | 决策 | 状态 |
+|---|---|---|
+| 2026-02-11 | §4 模块处置总表（含 Swarm 全删 3,252 行） | ✅ 已批准 |
+| 2026-02-11 | §5.3 白名单 8 包保留 / 排除 pi-agent-extensions | ✅ 已批准 |
+| 2026-02-11 | §6 自建优先级：**perf-lab 先于 latex-toolchain** | ✅ 已批准（Phase 3/4 已对调） |
 
 ---
 
@@ -367,13 +375,13 @@ pi 原生 package 系统（`pi` manifest：extensions/skills/prompts/themes + ga
 - 排除 pi-agent-extensions（`pi remove npm:pi-agent-extensions`），验证 Ask/Todo 补位无感
 - 升级 devDeps 至 pi 0.84 并全矩阵验证
 
-**Phase 3 — 学术场景成型（~1 周）**
-- 安装试用 academic-research-skills / pi-bib / pi-critique，跑通一篇已有论文的 review→revise→bib-check 流程
-- 自建 latex-toolchain（§6.1），以一篇真实 LaTeX 稿件为验收对象
-
-**Phase 4 — 性能探索成型（~1 周）**
+**Phase 3 — 性能探索成型（~1 周，优先级提升）**
 - 自建 perf-lab（§6.2），以一个真实算子（如某 CUDA kernel 或 cpp 例程）benchmark+profile 为验收对象
 - 打通 Goal→multiloop→perf-lab→lifeline 链路，长时无人值守跑一轮
+
+**Phase 4 — 学术场景成型（~1 周）**
+- 安装试用 academic-research-skills / pi-bib / pi-critique，跑通一篇已有论文的 review→revise→bib-check 流程
+- 自建 latex-toolchain（§6.1），以一篇真实 LaTeX 稿件为验收对象
 
 **Phase 5 — 沉淀与回访（持续）**
 - explore-sync（§6.3）；每季度回访白名单包的活跃度，评估进一步吸收或替换
