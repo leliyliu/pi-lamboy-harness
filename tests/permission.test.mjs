@@ -53,17 +53,10 @@ function check(name, cond, extra = "") {
 const cleanCwd = fs.mkdtempSync(path.join(os.tmpdir(), "perm-test-clean-"));
 
 // Isolate from the machine's real global instruction files: the policy chain
-// now honors $KIMI_CODE_HOME/AGENTS.md and ~/.agents/AGENTS.md
-// (Kimi Code instruction-file hierarchy), so point all three lookup roots at
-// the empty temp dir unless a test overrides one deliberately.
-process.env.KIMI_CODE_HOME = cleanCwd;
+// honors ~/.agents/AGENTS.md (cross-tool), so point HOME at the empty temp
+// dir unless a test overrides one deliberately.
 process.env.HOME = cleanCwd;
 process.env.USERPROFILE = cleanCwd;
-// Isolate hooks: the permission ask path fires PermissionRequest/Result hook
-// events, and this machine's real ~/.kimi-code/config.toml (16 hooks) would
-// otherwise be found by the project-config walk above cleanCwd and spawn
-// hook processes with cwd=cleanCwd (locking the temp dir on cleanup).
-process.env.KIMI_CODE_HOOKS_CONFIG = path.join(cleanCwd, "no-hooks.toml");
 
 // ctx stub: confirmAnswer controls the simulated user's choice on ask prompts.
 function makeCtx(confirmAnswer) {
@@ -137,33 +130,22 @@ permissionManager.resetHistory();
   fs.rmSync(denyCwd, { recursive: true, force: true });
 }
 
-// ── 5b. 全局 $KIMI_CODE_HOME/AGENTS.md 的 destructive-ask-always 同样生效 ──
+// ── 5b. 跨工具全局 ~/.agents/AGENTS.md 的 destructive-ask-always 同样生效 ──
 {
-  const gHome = fs.mkdtempSync(path.join(os.tmpdir(), "perm-test-khome-"));
-  fs.writeFileSync(path.join(gHome, "AGENTS.md"), "destructive-ask-always\n");
-  const prev = process.env.KIMI_CODE_HOME;
-  process.env.KIMI_CODE_HOME = gHome;
+  const agentsHome = fs.mkdtempSync(path.join(os.tmpdir(), "perm-test-agents-"));
+  fs.mkdirSync(path.join(agentsHome, ".agents"));
+  fs.writeFileSync(path.join(agentsHome, ".agents", "AGENTS.md"), "destructive-ask-always\n");
+  const prev = process.env.HOME;
+  process.env.HOME = agentsHome;
   try {
     const blocked = await evalIn("bash", { command: "rm -rf /tmp/z" }, cleanCwd, true);
-    check("global KIMI_CODE_HOME AGENTS.md: destructive denied",
+    check("cross-tool ~/.agents/AGENTS.md: destructive denied",
       blocked?.block === true && /destructive-ask-always/.test(blocked?.reason ?? ""),
       JSON.stringify(blocked));
   } finally {
-    process.env.KIMI_CODE_HOME = prev;
-    fs.rmSync(gHome, { recursive: true, force: true });
+    process.env.HOME = prev;
+    fs.rmSync(agentsHome, { recursive: true, force: true });
   }
-}
-
-// ── 5c. 项目子目录形式 .kimi-code/AGENTS.md 也被识别 ─────────────────────
-{
-  const projCwd = fs.mkdtempSync(path.join(os.tmpdir(), "perm-test-nested-"));
-  fs.mkdirSync(path.join(projCwd, ".kimi-code"));
-  fs.writeFileSync(path.join(projCwd, ".kimi-code", "AGENTS.md"), "destructive-ask-always\n");
-  const blocked = await evalIn("bash", { command: "rm -rf /tmp/z" }, projCwd, true);
-  check("project .kimi-code/AGENTS.md: destructive denied",
-    blocked?.block === true && /destructive-ask-always/.test(blocked?.reason ?? ""),
-    JSON.stringify(blocked));
-  fs.rmSync(projCwd, { recursive: true, force: true });
 }
 
 // ── 6. 模式切换语义: manual -> ask, yolo -> approve ───────────────────────
