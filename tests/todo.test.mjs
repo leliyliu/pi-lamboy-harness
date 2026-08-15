@@ -408,5 +408,10 @@ check("release: not found error", cr9.errors.length > 0);
 const cr10 = applyOp(makePhases(), { op: "release", task: "Build picker UI", sessionId: "alice" });
 check("release: unclaimed task errors", cr10.errors.length > 0);
 
+// drop implicitly releases a claimed task (terminal state, no orphan lock)
+const cr11 = applyOp(cr1.phases, { op: "drop", task: "Build picker UI", sessionId: "alice" });
+check("drop: claimed task abandons", cr11.phases[1].tasks[0].status === "abandoned");
+check("drop: implicitly releases claim", cr11.phases[1].tasks[0].claimedBy === undefined && cr11.phases[1].tasks[0].claimedAt === undefined);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

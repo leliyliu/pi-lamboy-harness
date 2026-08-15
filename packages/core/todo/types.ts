@@ -334,7 +334,7 @@ function applyEntry(phases: TodoPhase[], entry: TodoOpParams, errors: string[]):
     case "done":
       return markTasks(phases, entry, "completed", errors, true);
     case "drop":
-      return markTasks(phases, entry, "abandoned", errors);
+      return markTasks(phases, entry, "abandoned", errors, true);
     case "rm":
       return removeTasks(phases, entry, errors);
     case "append":
