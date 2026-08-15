@@ -69,7 +69,7 @@ All tools are model-callable, all commands are slash commands with Tab completio
 - **Sensitive-file guard** — `.env` / `id_rsa` / `*.key` read/write interception, even in auto mode
 - **Session approval fingerprints** — approvals remembered per sessionId + input fingerprint, never degrading into "permanent allow"
 - **Approval panel** — numbered dialog with per-tool action titles ("Run this command?" / "Apply these edits?"), digit-key direct select, four outcomes: Allow once / Always allow (session) / Deny / Deny with reason (reason relayed to the model). In RPC hosts (obsidian-pi etc.) the same choices render over the extension UI protocol (`select` / `input` / `confirm`) instead of the TUI dialog — no more silent denials
-- **AGENTS.md hierarchy** — project (nearest `AGENTS.md` or `.kimi-code/AGENTS.md`) → global `$KIMI_CODE_HOME/AGENTS.md` → cross-tool `~/.agents/AGENTS.md`, aggregated; `destructive-ask-always` can upgrade ask to deny
+- **AGENTS.md hierarchy** — project (nearest `AGENTS.md`, walking up) → cross-tool `~/.agents/AGENTS.md`, aggregated; `destructive-ask-always` can upgrade ask to deny
 - **Config cache** — permission config cached by file mtime, edits take effect immediately
 - **Persistent startup mode** — optional `"defaultMode": "auto" | "yolo" | "manual"` in `~/.pi/agent/permissions.json` (global) or `.pi/permissions.json` (project; global wins on conflict) replaces the hardcoded `manual` startup mode, so new sessions start in your preferred mode without an interactive `/mode` call. A session with a recorded `/mode` history still restores the last used mode; `defaultMode` is the starting point for fresh sessions.
 
@@ -150,7 +150,7 @@ pi-lamboy-harness/
 │   ├── pause/             pause gate + full-screen overlay layout (pure, theme-injectable)
 │   └── tui/               box/config/parse/switch/timing/spinner (pure chrome parts)
 ├── pause/                 adapter: /pause overlay component
-├── tui/                   adapter: MuselinnEditor + event wiring
+├── tui/                   adapter: LamboyEditor + event wiring
 ├── ask/                   adapter: question dialog + ask_user_question tool
 ├── todo/                  adapter: todo_list tool + inline panel widget
 └── tests/                 node-level unit tests (below)

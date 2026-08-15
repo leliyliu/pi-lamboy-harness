@@ -59,7 +59,7 @@ pi                                                      # 重启 pi，然后试�
 - **敏感文件守卫** — `.env` / `id_rsa` / `*.key` 等读写拦截，auto 模式下也不放行
 - **会话批准指纹** — 按 sessionId + 输入指纹记忆批准，不蜕变为"永久许可"
 - **审批面板** — 编号对话框，按工具定制动作标题，数字键直选，四种结果：Allow once / Always allow（本会话）/ Deny / Deny with reason（理由回传给模型）。在 RPC 宿主（obsidian-pi 等）中，同样的四个选择走扩展 UI 协议（`select` / `input` / `confirm`）呈现，不再静默拒绝
-- **AGENTS.md 指令** — 项目级（最近的 `AGENTS.md` 或 `.kimi-code/AGENTS.md`）→ 全局 `$KIMI_CODE_HOME/AGENTS.md` → 跨工具 `~/.agents/AGENTS.md`，聚合生效；`destructive-ask-always` 可将 ask 升级为 deny
+- **AGENTS.md 指令** — 项目级（最近的裸 `AGENTS.md`，向上遍历）→ 跨工具 `~/.agents/AGENTS.md`，聚合生效；`destructive-ask-always` 可将 ask 升级为 deny
 - **配置缓存** — 权限配置按文件 mtime 缓存，变更即时生效
 - **持久化启动模式** — 可选 `"defaultMode": "auto" | "yolo" | "manual"`（全局 `~/.pi/agent/permissions.json` 或项目 `.pi/permissions.json`，冲突时全局优先）替代硬编码的 `manual` 启动模式，新会话直接以偏好模式启动；有 `/mode` 历史的会话仍恢复上次模式，`defaultMode` 是全新会话的起点
 
@@ -128,18 +128,18 @@ pi-lamboy-harness/
 │   ├── ports.ts           host 契约（PersistencePort、ScopeDirs）
 │   ├── text-utils.ts      visibleWidth 等
 │   ├── shell-output.ts    控制序列净化器
+│   ├── stream-rules/      stream 入口规则引擎（纯函数）
 │   ├── truncation/        超大工具结果落盘（纯函数）
 │   ├── completions.ts     命令参数补全（Tab 补全）
 │   ├── ask/               提问规格 + 答案格式化（纯函数）
-│   ├── todo/              todo 模型 + 折叠策略（纯函数）
+│   ├── todo/              todo 模型 + 折叠策略 + 认领/释放（纯函数）
 │   ├── goal/              Goal 模块（状态机 + 预算 + 队列 + 持久化）
 │   ├── plan/              Plan 模块（工具白名单 + 路径守卫 + 注入）
 │   ├── permission/        Permission 模块（策略链 + 审批契约）
 │   ├── pause/             暂停门禁 + 全屏遮罩布局（纯函数，主题可注入）
-│   ├── profile/           子代理 profile 定义（暂未使用 — Phase 2 清理）
 │   └── tui/               box/config/parse/switch/timing/spinner（纯 chrome 件）
 ├── pause/                 适配层：/pause 遮罩组件
-├── tui/                   适配层：MuselinnEditor + 事件接线
+├── tui/                   适配层：LamboyEditor + 事件接线
 ├── ask/                   适配层：提问对话框 + ask_user_question 工具
 ├── todo/                  适配层：todo_list 工具 + 内联面板
 └── tests/                 node 级单元测试（见下）
