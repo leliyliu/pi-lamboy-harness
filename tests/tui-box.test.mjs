@@ -151,8 +151,8 @@ check("truncate: SGR passes through uncounted",
 // ══════════════════════════════════════════════════════════════
 // 5. config — defaults, merge, save/load round trip
 // ══════════════════════════════════════════════════════════════
-const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "muselinn-tui-test-"));
-const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), "muselinn-tui-cwd-"));
+const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "lamboy-tui-test-"));
+const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), "lamboy-tui-cwd-"));
 const savedHome = process.env.HOME;
 const savedProfile = process.env.USERPROFILE;
 process.env.HOME = tmpHome;
@@ -172,16 +172,16 @@ check("config: saved values reload",
 config.saveTuiConfig({ style: "boxed", modelInBorder: true });
 check("config: modelInBorder true persists",
   config.loadTuiConfig(tmpCwd).modelInBorder === true);
-fs.writeFileSync(path.join(tmpHome, ".pi", "agent", "muselinn-tui.json"),
+fs.writeFileSync(path.join(tmpHome, ".pi", "agent", "lamboy-tui.json"),
   JSON.stringify({ modelInBorder: "yes" }), "utf-8");
 check("config: non-boolean modelInBorder → default false",
-  config.loadTuiConfig(fs.mkdtempSync(path.join(os.tmpdir(), "muselinn-tui-cwd3-"))).modelInBorder === false);
+  config.loadTuiConfig(fs.mkdtempSync(path.join(os.tmpdir(), "lamboy-tui-cwd"))).modelInBorder === false);
 // restore the style used by the project-override checks below
 config.saveTuiConfig({ style: "compact", modelInBorder: false });
 
 // project overrides global
 fs.mkdirSync(path.join(tmpCwd, ".pi"), { recursive: true });
-fs.writeFileSync(path.join(tmpCwd, ".pi", "muselinn-tui.json"),
+fs.writeFileSync(path.join(tmpCwd, ".pi", "lamboy-tui.json"),
   JSON.stringify({ style: "plain", modelInBorder: "bogus" }), "utf-8");
 const merged = config.loadTuiConfig(tmpCwd);
 check("config: project overrides global style",
@@ -190,9 +190,9 @@ check("config: invalid project modelInBorder falls back to global",
   merged.modelInBorder === false, JSON.stringify(merged));
 
 // invalid global values fall back to defaults
-fs.writeFileSync(path.join(tmpHome, ".pi", "agent", "muselinn-tui.json"),
+fs.writeFileSync(path.join(tmpHome, ".pi", "agent", "lamboy-tui.json"),
   JSON.stringify({ style: "weird", layout: 42 }), "utf-8");
-const sane = config.loadTuiConfig(fs.mkdtempSync(path.join(os.tmpdir(), "muselinn-tui-cwd2-")));
+const sane = config.loadTuiConfig(fs.mkdtempSync(path.join(os.tmpdir(), "lamboy-tui-cwd")));
 check("config: invalid global values → defaults",
   sane.style === "boxed" && sane.modelInBorder === false, JSON.stringify(sane));
 

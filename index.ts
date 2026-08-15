@@ -13,6 +13,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { goalManager } from "./packages/core/goal";
+import { GOAL_ENTRY_TYPE } from "./packages/core/goal/types";
 import type { PersistencePort } from "./packages/core/ports";
 import { planManager } from "./packages/core/plan";
 import { permissionManager, approvalViaRpcUi } from "./packages/core/permission";
@@ -25,8 +26,6 @@ import { phasesToMarkdown, markdownToPhases, applyOp, TodoPhase, TodoItem } from
 import { registerTui, setTuiBadgeProvider } from "./tui/index";
 import { agentPauseGate } from "./packages/core/pause/gate";
 import { registerPauseCommands } from "./pause/commands";
-const GOAL_ENTRY_TYPE = "muselinn_goal";
-
 export default function (pi: ExtensionAPI) {
   // ── Goal persistence: save on every change ──
   // Note: pi/ctx go stale after session replacement (newSession/fork/reload
@@ -48,12 +47,12 @@ export default function (pi: ExtensionAPI) {
   // Plan state is managed per-session via file in session directory (see plan/commands.ts)
   // Persist plan state on every change so session restore (below) can pick it up.
   planManager.setPersistence((data) => {
-    try { pi.appendEntry("muselinn_plan", data); } catch { /* stale ctx */ }
+    try { pi.appendEntry("lamboy_plan", data); } catch { /* stale ctx */ }
   });
 
   // ── Permission mode persistence ──
   permissionManager.setPersistence((mode) => {
-    try { pi.appendEntry("muselinn_permission", { mode }); } catch { /* stale ctx */ }
+    try { pi.appendEntry("lamboy_permission", { mode }); } catch { /* stale ctx */ }
   });
 
   // ── Permission approval dialog: numbered three-way ask (shared with
@@ -139,7 +138,7 @@ export default function (pi: ExtensionAPI) {
       const entries = ctx.sessionManager.getEntries();
       for (let i = entries.length - 1; i >= 0; i--) {
         const e = entries[i] as any;
-        if (e.type === "custom" && e.customType === "muselinn_plan" && e.data) {
+        if (e.type === "custom" && e.customType === "lamboy_plan" && e.data) {
           planManager.restoreFromData(e.data);
           planManager.validateRestoredState();
           break;
@@ -182,7 +181,7 @@ export default function (pi: ExtensionAPI) {
       const entries = ctx.sessionManager.getEntries();
       for (let i = entries.length - 1; i >= 0; i--) {
         const e = entries[i] as any;
-        if (e.type === "custom" && e.customType === "muselinn_permission" && e.data?.mode) {
+        if (e.type === "custom" && e.customType === "lamboy_permission" && e.data?.mode) {
           if (["auto", "yolo", "manual"].includes(e.data.mode)) {
             permissionManager.setMode(e.data.mode);
             const restoredMode = e.data.mode;
@@ -277,8 +276,8 @@ export default function (pi: ExtensionAPI) {
       const out = content.map((part: any) => {
         if (part?.type !== "text" || typeof part.text !== "string" || !shouldTruncate(part.text, truncationThreshold)) return part;
         let base: string;
-        try { base = ctx?.sessionManager?.getSessionDir?.() || path.join(os.tmpdir(), "pi-muselinn-harness"); }
-        catch { base = path.join(os.tmpdir(), "pi-muselinn-harness"); }
+        try { base = ctx?.sessionManager?.getSessionDir?.() || path.join(os.tmpdir(), "pi-lamboy-harness"); }
+        catch { base = path.join(os.tmpdir(), "pi-lamboy-harness"); }
         const p = truncationPathFor(base, String(event.toolName ?? "tool"), String(event.toolCallId ?? Date.now()));
         fs.mkdirSync(path.dirname(p), { recursive: true });
         fs.writeFileSync(p, part.text, "utf8");

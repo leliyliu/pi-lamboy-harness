@@ -166,8 +166,8 @@ check("memory stale before exit", planManager.getCurrentPlan()?.content === "");
 const syncExited = planManager.exitPlanMode();
 check("exitPlanMode syncs content from disk", syncExited?.content === diskContent);
 
-// ── Bug: muselinn_plan duplicate entries — persist() must dedup identical state ──
-// Production symptom: 5 identical muselinn_plan entries appended within 25s
+// ── Bug: lamboy_plan duplicate entries — persist() must dedup identical state ──
+// Production symptom: 5 identical lamboy_plan entries appended within 25s
 // (repeat lifecycle calls / post-restore persists with no state change).
 {
   const { PlanManager } = loadTs(`${EXT}/packages/core/plan/index.ts`);

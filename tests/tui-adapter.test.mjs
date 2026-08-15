@@ -29,7 +29,7 @@ function resolveSpec(spec, parentFile) {
 
 // Minimal stand-in for pi's CustomEditor (ESM-only in the installed SDK,
 // not loadable via CJS require in this suite). Mirrors the surface
-// MuselinnEditor uses: constructor(tui, theme, options), borderColor,
+// LamboyEditor uses: constructor(tui, theme, options), borderColor,
 // paddingX, setText/getText, isShowingAutocomplete, render(width).
 class MockCustomEditor {
   constructor(tui, theme, options = {}) {

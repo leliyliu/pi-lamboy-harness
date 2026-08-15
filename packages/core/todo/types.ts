@@ -2,7 +2,7 @@
 // Todo — phased task model + mutation helpers (pure, no host imports).
 //
 // Ported from oh-my-pi's todo.ts (phase model with ops), adapted
-// for the pi-muselinn-harness extension tool surface.
+// for the pi-lamboy-harness extension tool surface.
 // ============================================================
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "abandoned";
@@ -41,7 +41,7 @@ export type TodoOpParams = {
   items?: string[];
 };
 
-export const TODO_ENTRY_TYPE = "muselinn_todo";
+export const TODO_ENTRY_TYPE = "lamboy_todo";
 const DEFAULT_INIT_PHASE = "Tasks";
 const MAX_ITEMS = 50;
 

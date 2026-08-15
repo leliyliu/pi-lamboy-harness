@@ -4,7 +4,7 @@
 // The pi extension (adapter) implements these with the pi API; the
 // MusePi fork implements them natively. Core modules NEVER import the
 // host — they receive ports via bind*() injection. This file is the
-// only contract between @muselinn/core and its hosts.
+// only contract between @lamboy/core and its hosts.
 // ============================================================
 
 /** A single session entry as returned by PersistencePort.entries(). */

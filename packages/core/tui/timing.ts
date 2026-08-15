@@ -1,7 +1,7 @@
 // ============================================================
 // TUI — Render timing probe (pure, no pi imports).
 //
-// Enabled via PI_MUSELINN_HARNESS_TUI_TIMING=1. Wraps hot render()
+// Enabled via PI_LAMBOY_TUI_TIMING=1. Wraps hot render()
 // paths (custom editor, bottom filler) and keeps a bounded ring of
 // samples per probe name; /tui timing prints P50/P99. The env var is
 // read once (render hot path must not re-parse process.env per frame).
@@ -74,7 +74,7 @@ let enabledCache: boolean | null = null;
 /** Env-gated on/off, resolved once (override via setTimingEnabledForTests). */
 export function isTimingEnabled(): boolean {
   if (enabledCache !== null) return enabledCache;
-  const v = (process.env.PI_MUSELINN_HARNESS_TUI_TIMING || "").toLowerCase();
+  const v = (process.env.PI_LAMBOY_TUI_TIMING || "").toLowerCase();
   enabledCache = v === "1" || v === "true" || v === "on";
   return enabledCache;
 }

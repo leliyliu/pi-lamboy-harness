@@ -56,7 +56,6 @@ const cleanCwd = fs.mkdtempSync(path.join(os.tmpdir(), "approval-rpc-test-"));
 process.env.KIMI_CODE_HOME = cleanCwd;
 process.env.HOME = cleanCwd;
 process.env.USERPROFILE = cleanCwd;
-process.env.KIMI_CODE_HOOKS_CONFIG = path.join(cleanCwd, "no-hooks.toml");
 
 // ── Unit: approvalViaRpcUi ─────────────────────────────────────
 const signal = new AbortController().signal;

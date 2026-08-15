@@ -15,7 +15,7 @@ import { type EditorStyle } from "../packages/core/tui/box";
 import { shouldKeepAliveRender, wallClockFrameIndex, KEEP_ALIVE_QUIET_MS, KEEP_ALIVE_INTERVAL_MS } from "../packages/core/tui/keepalive";
 import { shimmerText, type ShimmerMode } from "../packages/core/tui/shimmer";
 import { loadTuiConfig, saveTuiConfig, type TuiConfig } from "../packages/core/tui/config";
-import { MuselinnEditor } from "./editor";
+import { LamboyEditor } from "./editor";
 import { parseTuiArgs } from "../packages/core/tui/parse";
 import { planStyleSwitch } from "../packages/core/tui/switch";
 import { renderTiming, isTimingEnabled } from "../packages/core/tui/timing";
@@ -33,7 +33,7 @@ interface TuiRuntime {
   modelInBorder: boolean;
   /** Loaded shimmer mode (classic | kitt | disabled). */
   shimmer: "classic" | "kitt" | "disabled";
-  editor: MuselinnEditor | null;
+  editor: LamboyEditor | null;
   working: boolean;
   workingMessage: string | undefined;
   runningTools: Set<string>;
@@ -163,7 +163,7 @@ export function applyStyleToUi(ui: TuiUiLike, style: EditorStyle): void {
   }
   ui.setEditorComponent((tui: TUI, theme: any, keybindings: any) => {
     rt.tui = tui;
-    rt.editor = new MuselinnEditor(
+    rt.editor = new LamboyEditor(
       tui,
       theme,
       keybindings,
@@ -326,7 +326,7 @@ export function registerTui(pi: ExtensionAPI): void {
             "  /tui                          show this status",
             "  /tui style <plain|boxed|compact>",
             "  /tui shimmer <classic|kitt|disabled>   working-message sweep",
-            "  /tui timing                   render timing (PI_MUSELINN_HARNESS_TUI_TIMING=1)",
+            "  /tui timing                   render timing (PI_LAMBOY_TUI_TIMING=1)",
           ];
           if (isTimingEnabled()) lines.push(renderTiming.format());
           ctx.ui.notify(lines.join("\n"), "info");
@@ -347,7 +347,7 @@ export function registerTui(pi: ExtensionAPI): void {
         }
         case "timing": {
           if (!isTimingEnabled()) {
-            ctx.ui.notify("timing is off — restart pi with PI_MUSELINN_HARNESS_TUI_TIMING=1", "info");
+            ctx.ui.notify("timing is off — restart pi with PI_LAMBOY_TUI_TIMING=1", "info");
           } else {
             ctx.ui.notify(renderTiming.format(), "info");
           }

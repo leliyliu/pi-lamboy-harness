@@ -55,7 +55,7 @@ export class PlanManager {
    * Dedup: skip the append when the serialized state is identical to the
    * last persisted one. Restore validation and repeat lifecycle calls
    * (e.g. exitPlanMode on an already-exited plan) retrigger persist without
-   * changing state, which previously appended duplicate muselinn_plan entries.
+   * changing state, which previously appended duplicate lamboy_plan entries.
    */
   private persist(): void {
     if (!this.persistFn) return;

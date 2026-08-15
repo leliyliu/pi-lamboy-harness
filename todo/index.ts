@@ -170,7 +170,7 @@ export function refreshWidget(): void {
 }
 
 // ── Auto-clear (OMP tasks.todoClearDelay parity) ───────────────
-// PI_MUSELINN_TODO_CLEAR_DELAY seconds after a task completes/abandons, the
+// PI_LAMBOY_TODO_CLEAR_DELAY seconds after a task completes/abandons, the
 // closed tasks are removed from the plan (empty phases dropped) and persisted.
 //   0  = instant (same as /todo rm for closed items)
 //  -1  = never (manual /todo rm)
@@ -178,7 +178,7 @@ export function refreshWidget(): void {
 let todoClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 function todoClearDelaySeconds(): number {
-  const raw = process.env.PI_MUSELINN_TODO_CLEAR_DELAY;
+  const raw = process.env.PI_LAMBOY_TODO_CLEAR_DELAY;
   if (raw === undefined || raw === "") return 60;
   const n = Number(raw);
   return Number.isFinite(n) ? n : 60;
@@ -391,7 +391,7 @@ export function togglePanel(): void {
 // ── Reminder system ────────────────────────────────────────────
 
 const MID_RUN_NUDGE_THRESHOLD = 8; // mutations without todo touch → nudge
-const EAGER_PROMPT_SEEN_KEY = "muselinn_todo_eager_seen";
+const EAGER_PROMPT_SEEN_KEY = "lamboy_todo_eager_seen";
 
 /**
  * Register todo reminder hooks on the pi object.

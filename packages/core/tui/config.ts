@@ -1,8 +1,8 @@
 // ============================================================
 // TUI — Config (pure, no pi imports).
 //
-// Global:  ~/.pi/agent/muselinn-tui.json
-// Project: .pi/muselinn-tui.json (overrides matching global fields)
+// Global:  ~/.pi/agent/lamboy-tui.json
+// Project: .pi/lamboy-tui.json (overrides matching global fields)
 // Writes always go to the global file (same convention as
 // permission/config.ts writing to ~/.pi/agent).
 // ============================================================
@@ -27,7 +27,7 @@ export const DEFAULT_TUI_CONFIG: TuiConfig = {
   shimmer: "classic",
 };
 
-const CONFIG_FILENAME = "muselinn-tui.json";
+const CONFIG_FILENAME = "lamboy-tui.json";
 
 export function globalTuiConfigPath(): string {
   const home = process.env.HOME || process.env.USERPROFILE || ".";

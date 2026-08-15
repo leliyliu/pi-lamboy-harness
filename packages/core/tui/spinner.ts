@@ -16,14 +16,14 @@ export const SPINNER_STYLES: Record<string, string[]> = {
 
 export const DEFAULT_SPINNER_STYLE = "braille";
 
-// Single-entry memo: resolved once per PI_MUSELINN_SPINNER value; the widget
+// Single-entry memo: resolved once per PI_LAMBOY_SPINNER value; the widget
 // calls this every frame, so the env lookup must not hit process.env parsing
 // or object allocation on the hot path.
 let spinnerCache: { key: string; frames: string[] } | null = null;
 
-/** Active spinner frames: PI_MUSELINN_SPINNER env, else braille. */
+/** Active spinner frames: PI_LAMBOY_SPINNER env, else braille. */
 export function getSpinnerFrames(): string[] {
-  const key = (process.env.PI_MUSELINN_SPINNER || DEFAULT_SPINNER_STYLE).toLowerCase();
+  const key = (process.env.PI_LAMBOY_SPINNER || DEFAULT_SPINNER_STYLE).toLowerCase();
   if (spinnerCache && spinnerCache.key === key) return spinnerCache.frames;
   const frames = SPINNER_STYLES[key] ?? SPINNER_STYLES[DEFAULT_SPINNER_STYLE];
   spinnerCache = { key, frames };

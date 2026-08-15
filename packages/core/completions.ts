@@ -120,7 +120,7 @@ export function planArgumentCompletions(prefix: string): CompletionItem[] | null
 const TUI_SUBCOMMANDS: CompletionItem[] = [
   { value: "style", label: "style <plain|boxed|compact>", description: "Editor chrome style" },
   { value: "shimmer", label: "shimmer <classic|kitt|disabled>", description: "Working-message sweep animation" },
-  { value: "timing", label: "timing", description: "Render timing stats (PI_MUSELINN_HARNESS_TUI_TIMING=1)" },
+  { value: "timing", label: "timing", description: "Render timing stats (PI_LAMBOY_TUI_TIMING=1)" },
 ];
 
 const TUI_SHIMMER_MODES: CompletionItem[] = [

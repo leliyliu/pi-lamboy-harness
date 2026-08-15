@@ -147,12 +147,12 @@ check("mode: no-match falls back to full list",
   completions.modeArgumentCompletions("zzz").length === 4);
 
 // ══════════════════════════════════════════════════════════════
-// 4. Spinner styles (harness-branded, PI_MUSELINN_SPINNER)
+// 4. Spinner styles (harness-branded, PI_LAMBOY_SPINNER)
 // ══════════════════════════════════════════════════════════════
 const spinner = loadTs(`${EXT}/packages/core/tui/spinner.ts`);
 const { getSpinnerFrames, SPINNER_STYLES, DEFAULT_SPINNER_STYLE, FRAME_INTERVAL_MS } = spinner;
 
-delete process.env.PI_MUSELINN_SPINNER;
+delete process.env.PI_LAMBOY_SPINNER;
 check("spinner: default style is braille",
   DEFAULT_SPINNER_STYLE === "braille"
   && getSpinnerFrames() === SPINNER_STYLES.braille);
@@ -160,22 +160,22 @@ check("spinner: braille frames are single-width (no emoji)",
   SPINNER_STYLES.braille.every((f) => [...f].length === 1 && f.charCodeAt(0) >= 0x2800 && f.charCodeAt(0) <= 0x28ff));
 check("spinner: frame interval is 250ms", FRAME_INTERVAL_MS === 250);
 
-process.env.PI_MUSELINN_SPINNER = "pulse";
+process.env.PI_LAMBOY_SPINNER = "pulse";
 check("spinner: env override selects pulse",
   getSpinnerFrames() === SPINNER_STYLES.pulse);
 
-process.env.PI_MUSELINN_SPINNER = "BOUNCE";
+process.env.PI_LAMBOY_SPINNER = "BOUNCE";
 check("spinner: env override is case-insensitive",
   getSpinnerFrames() === SPINNER_STYLES.bounce);
 
-process.env.PI_MUSELINN_SPINNER = "moon";
+process.env.PI_LAMBOY_SPINNER = "moon";
 check("spinner: legacy moon style still available",
   getSpinnerFrames() === SPINNER_STYLES.moon && SPINNER_STYLES.moon.length === 8);
 
-process.env.PI_MUSELINN_SPINNER = "nonexistent";
+process.env.PI_LAMBOY_SPINNER = "nonexistent";
 check("spinner: unknown style falls back to braille",
   getSpinnerFrames() === SPINNER_STYLES.braille);
-delete process.env.PI_MUSELINN_SPINNER;
+delete process.env.PI_LAMBOY_SPINNER;
 
 // ── spinner keep-alive gate (wall-clock piggyback render) ──
 const { shouldKeepAliveRender, wallClockFrameIndex, KEEP_ALIVE_QUIET_MS } = loadTs(`${EXT}/packages/core/tui/keepalive.ts`);

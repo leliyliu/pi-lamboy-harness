@@ -156,7 +156,7 @@ reset();
 }
 
 // ── 6. tryRestoreFromEntries: 仅空状态恢复 + complete 墓碑不恢复 ─────────
-function goalEntry(data) { return { type: "custom", customType: "muselinn_goal", data }; }
+function goalEntry(data) { return { type: "custom", customType: "lamboy_goal", data }; }
 function entryData(over = {}) {
   return {
     goalId: "g-e1", objective: "entry goal", status: "active", lastActor: "user",
@@ -199,7 +199,7 @@ reset();
   goalManager.recordTurn(10);
   goalManager.clear();
   goalManager.setAppendEntry(() => {});
-  const tombstones = appended.filter(a => a.type === "muselinn_goal" && a.data?.status === "complete");
+  const tombstones = appended.filter(a => a.type === "lamboy_goal" && a.data?.status === "complete");
   check("clear() appends a complete-status tombstone entry", tombstones.length >= 1,
     JSON.stringify(appended.map(a => a.data?.status)));
 

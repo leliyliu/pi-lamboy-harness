@@ -1,5 +1,5 @@
 // ============================================================
-// TUI — MuselinnEditor: custom pi editor with switchable chrome.
+// TUI — LamboyEditor: custom pi editor with switchable chrome.
 //
 //   boxed   — closed box (╭╮│╰╯) with spinner/model
 //             embedded in the top border.
@@ -28,7 +28,7 @@ export interface EditorSlots {
   right(): string;
 }
 
-export class MuselinnEditor extends CustomEditor {
+export class LamboyEditor extends CustomEditor {
   private readonly chromeStyle: EditorStyle;
   private readonly slots: EditorSlots;
   private readonly timing: RenderTiming | null;

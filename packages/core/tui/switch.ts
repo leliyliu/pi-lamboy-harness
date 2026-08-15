@@ -11,7 +11,7 @@
 import type { EditorStyle } from "./box.ts";
 
 export interface StylePlan {
-  /** true → register a MuselinnEditor factory; false → setEditorComponent(undefined). */
+  /** true → register a LamboyEditor factory; false → setEditorComponent(undefined). */
   registerFactory: boolean;
   /** pi's own working indicator visibility for this style. */
   workingVisible: boolean;

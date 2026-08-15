@@ -90,7 +90,7 @@ export interface GoalQueue {
 }
 
 // Entry type for persistence
-export const GOAL_ENTRY_TYPE = "muselinn_goal";
+export const GOAL_ENTRY_TYPE = "lamboy_goal";
 
 export interface GoalEntryData {
   goalId: string;
