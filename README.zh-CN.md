@@ -67,9 +67,9 @@ pi                                                      # 重启 pi，然后试�
 - **闭合框编辑器** — 移植 Kimi Code 的 `wrapWithSideBorders`：pi-tui 默认只有上下横线，后处理为 `╭╮│╰╯` 闭合框；上边框嵌入 spinner + 工作状态（Thinking/Streaming/Running tools），`plain | boxed | compact` 三种样式，默认 boxed；模型名需要时配置 `"modelInBorder": true`
 
   首个内容行带提示符（`│❯ text │`），padding 最低 2，边框永不触碰文本/光标。
-- **`/tui` 命令** — 热切换编辑器样式（不重启，保留文本/焦点/键位），`/tui timing` 查看渲染耗时；配置持久化到 `~/.pi/agent/muselinn-tui.json`（项目级 `.pi/` 覆盖）
+- **`/tui` 命令** — 热切换编辑器样式（不重启，保留文本/焦点/键位），`/tui timing` 查看渲染耗时；配置持久化到 `~/.pi/agent/lamboy-tui.json`（项目级 `.pi/` 覆盖）
 - **plan 徽标** — plan mode 激活时上边框显示 `plan` 文本徽标（不染边框色，与 pi 思考模式换色零冲突）
-- **性能探针** — `PI_MUSELINN_HARNESS_TUI_TIMING=1` 统计 editor `render()` 的 P50/P99；spinner 仅在工作时以 250ms 帧率驱动
+- **性能探针** — `PI_LAMBOY_TUI_TIMING=1` 统计 editor `render()` 的 P50/P99；spinner 仅在工作时以 250ms 帧率驱动
 - **Shimmer 工作消息（OMP 风格）** — 编辑器边框里的工作状态文字带墙钟驱动的光带扫描（`classic` 余弦光带或 `kitt` K.I.T.T. 扫描灯）；亮头处 accent+bold 高亮，浅色文字在动画中也清晰。默认 `low: dim / mid: muted / high: accent`；`/tui shimmer <classic|kitt|disabled>` 热切换，配置持久化
 - **稳定的动画帧率** — keep-alive 使用固定 200ms 静默门（≈10fps 上限），动画节奏恒定；流式时复用 pi 自然渲染零额外开销，agent 停滞时最多每秒 ~10 次全树渲染（大会话也可承受）
 
@@ -82,9 +82,10 @@ pi                                                      # 重启 pi，然后试�
 - **auto 模式安全** — auto 模式下 `ask_user_question` 被策略专门拒绝（防无人值守卡死）
 
 ### Todo 模块（内联任务计划）
-- **内联面板** — 编辑器上方 widget，罗马数字阶段树（`Ⅰ. Scanner · 2/4`），`/todo toggle` 展开/折叠；完成的任务在 `PI_MUSELINN_TODO_CLEAR_DELAY` 秒后自动清除（默认 60，`0`=立即，`-1`=手动）——完成的计划自动淡出，不再残留
+- **内联面板** — 编辑器上方 widget，罗马数字阶段树（`Ⅰ. Scanner · 2/4`），`/todo toggle` 展开/折叠；完成的任务在 `PI_LAMBOY_TODO_CLEAR_DELAY` 秒后自动清除（默认 60，`0`=立即，`-1`=手动）——完成的计划自动淡出，不再残留
 - **`/todo` 命令** — 完整 oh-my-pi 阶段模型：`init` / `start` / `done` / `drop` / `rm` / `append` / `export` / `import` / `copy` / `edit` / `add_notes` / `update_details`，裸 `/todo` 打印 Markdown
 - **`todo_list` 工具** — 模型驱动的任务管理，同一套操作
+- **认领/释放（claim/release）** — 多会话协作：已被他会话认领的任务不可再认领；`done` / `drop` 隐式释放认领
 - **提醒系统** — agent 停下时未完成 todo 以 `<system-reminder>` 注入下一轮（最多 3 次，防抖）
 - **Markdown 双向导出** — `/todo export/import` 跨会话持久化与分享
 - **备注** — `add_notes` / `update_details` 逐任务笔记
@@ -123,7 +124,7 @@ core/adapter 分层：`packages/core/` 是**零 pi import** 的纯逻辑；
 ```
 pi-lamboy-harness/
 ├── index.ts               入口（permission/plan 接线、截断、模块注册）
-├── packages/core/         @muselinn/core — 纯逻辑，零 host import
+├── packages/core/         @lamboy/core — 纯逻辑，零 host import
 │   ├── ports.ts           host 契约（PersistencePort、ScopeDirs）
 │   ├── text-utils.ts      visibleWidth 等
 │   ├── shell-output.ts    控制序列净化器
@@ -146,7 +147,7 @@ pi-lamboy-harness/
 
 ## 测试
 
-无需模型额度的 node 级单元测试（18 个套件，600 项断言）：
+无需模型额度的 node 级单元测试（14 个套件，568 项断言）：
 
 ```bash
 npm test                                        # 全部套件（node tests/run-all.mjs）
@@ -156,24 +157,20 @@ npm run typecheck                               # 全包 tsc 类型检查（stri
 或逐个运行：
 
 ```bash
-node tests/musepi-config.test.mjs                 # MusePi 配置兼容 — 9
-node tests/permission.test.mjs                    # Permission 策略链 26 项
-node tests/goal.test.mjs                          # Goal 状态机 + 单调恢复 32 项
-node tests/plan.test.mjs                          # Plan 模式往返 + 恢复校验 37 项
-node tests/tui.test.mjs                           # TUI 折叠/键位/补全/spinner 36 项
-node tests/tui-box.test.mjs                       # TUI 闭合框/配置/探针/切换 63 项
-node tests/tui-adapter.test.mjs                   # TUI 适配器 working-state 渲染路径 4 项
-node tests/agent-lifecycle.test.mjs               # agent 生命周期事件 — 6
-node tests/ask.test.mjs                           # ask 规格/对话框/答案/审批标题 118 项
-node tests/tool-policy.test.mjs                  # 工具策略门控 — 13
-node tests/pause-gate.test.mjs                    # 暂停门禁 + 全屏渲染 — 54
-node tests/todo.test.mjs                          # todo 模型 + 折叠策略 99 项
-node tests/shell-output.test.mjs                  # 输出净化器 21 项
-node tests/shimmer.test.mjs                     # shimmer 扫描动画引擎 — 10
-node tests/truncation.test.mjs                    # 结果落盘截断 + 窗口感知阈值 21 项
 node tests/approval-rpc.test.mjs                  # RPC 审批兜底（select/confirm）21 项
-node tests/renderer.test.mjs                      # 增量渲染器 buffer/tree 16 项
+node tests/ask.test.mjs                           # ask 规格/对话框/答案/审批标题 118 项
+node tests/goal.test.mjs                          # Goal 状态机 + 单调恢复 32 项
+node tests/pause-gate.test.mjs                    # 暂停门禁 + 全屏渲染 54 项
+node tests/permission.test.mjs                    # Permission 守卫层链 20 项
+node tests/plan.test.mjs                          # Plan 模式往返 + 恢复校验 37 项
+node tests/shell-output.test.mjs                  # 输出净化器 21 项
+node tests/shimmer.test.mjs                       # shimmer 扫描动画引擎 10 项
 node tests/stream-rules.test.mjs                  # 流式 entry 规则 14 项
+node tests/todo.test.mjs                          # todo 模型 + 折叠策略 + 认领/释放 117 项
+node tests/truncation.test.mjs                    # 结果落盘截断 + 窗口感知阈值 21 项
+node tests/tui-adapter.test.mjs                   # TUI 适配器 working-state 渲染路径 4 项
+node tests/tui-box.test.mjs                       # TUI 闭合框/配置/探针/切换 63 项
+node tests/tui.test.mjs                           # TUI 折叠/键位/补全/spinner 36 项
 ```
 
 测试支持 Node 22/24/26（22.6–22.17 走 `--experimental-strip-types`，更早的用 `tests/ts-esm-loader.mjs` TypeScript 转译；22.18+ 原生擦除类型）。

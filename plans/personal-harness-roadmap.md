@@ -1,6 +1,6 @@
 # pi-lamboy-harness 个人专属 Packages 改造路线图
 
-> 版本：v0.2（2026-02-11）· 状态：**设计已批准**
+> 版本：v0.3（2026-08-14）· 状态：**Phase 1/2 已执行**
 > 基线：pi-muselinn-harness 0.9.22（commit ad969a6）· pi 0.84.1
 > 目标读者：仓库所有者（个人维护者）
 
@@ -8,10 +8,14 @@
 
 | 日期 | 决策 | 状态 |
 |---|---|---|
-| 2026-02-11 | §4 模块处置总表（含 Swarm 全删 3,252 行） | ✅ 已批准 |
-| 2026-02-11 | §5.3 白名单 8 包保留 / 排除 pi-agent-extensions | ✅ 已批准 |
-| 2026-02-11 | §6 自建优先级：**perf-lab 先于 latex-toolchain** | ✅ 已批准（Phase 3/4 已对调） |
-| 2026-02-11 | 终审裁定：删除 docs 站点+pages.yml；release 脚本改名；agent-lifecycle 删接线留模块 | ✅ 已执行 |
+| 2026-08-14 | §4 模块处置总表（含 Swarm 全删 3,252 行） | ✅ 已批准 |
+| 2026-08-14 | §5.3 白名单 8 包保留 / 排除 pi-agent-extensions | ✅ 已批准 |
+| 2026-08-14 | §6 自建优先级：**perf-lab 先于 latex-toolchain** | ✅ 已批准（Phase 3/4 已对调） |
+| 2026-08-14 | 终审裁定：删除 docs 站点+pages.yml；release 脚本改名；agent-lifecycle 删接线留模块 | ✅ 已执行 |
+| 2026-08-14 | §4 Permission：**守卫层化**——保留 policyChain 架构与服务保留模块的策略，删 Kimi 层级+死代码 | ✅ 已批准 |
+| 2026-08-14 | §4 AGENTS.md：**删 Kimi 留标准**——删 `.kimi-code/` 与 `$KIMI_CODE_HOME`，保留项目裸 AGENTS.md + `~/.agents/` | ✅ 已批准 |
+| 2026-08-14 | §6 agent-lifecycle（76 行死代码）：**删除**，不做事件桥 | ✅ 已批准 |
+| 2026-08-14 | §4 muselinn 命名：**立即全改**（零历史负担，一次到位） | ✅ 已批准 |
 
 ---
 
@@ -52,7 +56,7 @@
 
 ### 1.2 模块清单（工具 + 命令 + 代码量）
 
-代码量统计方式：`find <dir> -name "*.ts" | xargs cat | wc -l`（2026-02-11 实测）。
+代码量统计方式：`find <dir> -name "*.ts" | xargs cat | wc -l`（2026-08-14 实测）。
 
 | 模块 | 注册的工具 | 命令 | core 行数 | adapter 行数 | 功能要点 |
 |---|---|---|---|---|---|
@@ -75,7 +79,7 @@
 
 ### 1.3 已安装第三方生态（对比基准）
 
-来自 `~/.pi/agent/settings.json`（9 包）+ `mcp.json`（Zotero MCP），实测于 2026-02-11：
+来自 `~/.pi/agent/settings.json`（9 包）+ `mcp.json`（Zotero MCP），实测于 2026-08-14：
 
 | 包 | 提供的能力（本会话实测工具） | 规模/活跃度 |
 |---|---|---|
@@ -371,14 +375,15 @@ pi 原生 package 系统（`pi` manifest：extensions/skills/prompts/themes + ga
 - 同步删除对应测试套件与 README 章节；每删一个模块跑一次全测试
 - 验收：typecheck 零错误、测试全绿、`pi -e .` 本地加载无警告
 
-**Phase 2 — 精简与补位（~5d）**
-- Permission 精简为守卫层；Plan 去 Kimi 耦合；Todo 吸收 claim/release；Pause 删 /steer
-- 排除 pi-agent-extensions（`pi remove npm:pi-agent-extensions`），验证 Ask/Todo 补位无感
-- 升级 devDeps 至 pi 0.84 并全矩阵验证
+**Phase 2 — 精简与补位（~5d）✅ 已完成**
+- Permission 精简为守卫层；Plan 去 Kimi 耦合；Todo 吸收 claim/release；Pause 删 /steer（后者在 Phase 1 任务 7 提前完成）
+- 排除 pi-agent-extensions（`pi remove npm:pi-agent-extensions`），验证 Ask/Todo 补位无感（任务 8）
+- 升级 devDeps 至 pi 0.84.2 并全矩阵验证（typecheck + 14 套件全绿）
 
-**Phase 2 死代码清扫清单（终审后登记）**
-- 待清扫：`packages/core/profile/`（零生产引用）、`packages/core/config/`（仅测试引用 schema.ts）、tool-policy 休眠 setter 层（`setProfilePolicy`/`setSessionDisabled` 无生产调用方）、`permission` 的 `evaluateForSubagent`（仅测试调用）、`packages/renderer/`（test-only）、`packages/core/agent-lifecycle/`（待决定：pi-subagents 事件桥或删除）
-- muselinn 兼容命名保留清单（0.9.22 升级用户兼容，Phase 2 决定是否改名）：`muselinn-tui.json`、`PI_MUSELINN_*` 环境变量、`muselinn_goal/plan/permission/todo` entry 类型、`index.ts` 中 `pi-muselinn-harness` tmpdir 回退名
+**Phase 2 死代码清扫清单（终审后登记）✅ 已完成**
+- 已清扫：`packages/core/profile/`、`packages/core/config/`、tool-policy 休眠 setter 层、`permission` 的 `evaluateForSubagent`、`packages/renderer/`、`packages/core/agent-lifecycle/`（删除）
+- muselinn 兼容命名保留清单：已改名 `lamboy-tui.json`、`PI_LAMBOY_*` 环境变量、`lamboy_goal/plan/permission/todo` entry 类型、`pi-lamboy-harness` tmpdir 回退名
+- 后续增强（非阻塞）：todo markdown export/import 不往返 claim 状态（与 `details`/`notes` 同属已知有损格式）
 
 **Phase 3 — 性能探索成型（~1 周，优先级提升）**
 - 自建 perf-lab（§6.2），以一个真实算子（如某 CUDA kernel 或 cpp 例程）benchmark+profile 为验收对象
@@ -405,7 +410,7 @@ pi 原生 package 系统（`pi` manifest：extensions/skills/prompts/themes + ga
 ## 8. 附录：证据与来源
 
 **本仓库（实测）**
-- 模块行数：`find <dir> -name "*.ts" | xargs cat | wc -l`（2026-02-11，§1.2 表）
+- 模块行数：`find <dir> -name "*.ts" | xargs cat | wc -l`（2026-08-14，§1.2 表）
 - 工具注册点：index.ts:575,586,780,1257,1531,1558；ask/index.ts:186；todo/index.ts:291；task/index.ts:312,371；webfetch/index.ts:50；packages/core/task/cron.ts:405
 - Kimi 痕迹：52 文件 / 42 处 `kimi-code|KIMI_CODE_HOME`（grep -ril 实测）
 - 测试基线：tests/ 目录 28 套件（README 称 830+ 断言）
@@ -416,7 +421,7 @@ pi 原生 package 系统（`pi` manifest：extensions/skills/prompts/themes + ga
 - pi-agent-extensions 17 扩展清单：pi.dev/packages/pi-agent-extensions + 本地 extensions/ 目录
 - 本会话实际可用的工具行为（subagent/workflow/multiloop_*/phone_a_friend/research/ask_user/todo 等）
 
-**生态调研（web，2026-02-11）**
+**生态调研（web，2026-08-14）**
 - pi.dev/packages gallery；npm `keywords:pi-package` 搜索（~5,890 包）
 - 学术包：github.com/portos-wang/pi-extensions（academic-research-skills）、npm pi-bib、github.com/omaclaren/pi-critique、github.com/linlic2005/linlic-agent、npm pi-research-workbench、github.com/Aspis0/pi-paper-lab、npm @fbraza/pi-cite、github.com/appautomaton/latex-arxiv-SKILL
 - 索引站：piext.tech（6,207 包）、pi-package.rectorspace.com（API）

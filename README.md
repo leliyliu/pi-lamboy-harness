@@ -78,9 +78,9 @@ All tools are model-callable, all commands are slash commands with Tab completio
 
   The first content line carries a prompt chevron (`│❯ text │`), padding is
   clamped to ≥2 so the bars never touch the text or cursor.
-- **`/tui` command** — hot-switch styles without restarting (pi preserves text/focus/keybindings when swapping editors); `/tui timing` shows render timing; config persisted to `~/.pi/agent/muselinn-tui.json` (project `.pi/` override)
+- **`/tui` command** — hot-switch styles without restarting (pi preserves text/focus/keybindings when swapping editors); `/tui timing` shows render timing; config persisted to `~/.pi/agent/lamboy-tui.json` (project `.pi/` override)
 - **Plan badge** — `plan` text badge on the top border while plan mode is active (no border recoloring — zero conflict with pi's thinking-level colors)
-- **Timing probe** — `PI_MUSELINN_HARNESS_TUI_TIMING=1` records editor `render()` P50/P99; spinner only ticks at 250 ms while the agent works
+- **Timing probe** — `PI_LAMBOY_TUI_TIMING=1` records editor `render()` P50/P99; spinner only ticks at 250 ms while the agent works
 - **Shimmer working message (OMP-style)** — the working label in the editor border gets a wall-clock driven light-band sweep (`classic` cosine band or `kitt` K.I.T.T. scanner); the crest paints accent+bold so dim text stays legible mid-animation. `low: dim / mid: muted / high: accent` by default; `/tui shimmer <classic|kitt|disabled>` switches live, config persisted
 - **Stable animation frame-rate** — the keep-alive timer uses a fixed 200ms quiet gate (≈10fps ceiling) so the animation cadence never changes; natural streaming renders ride pi's own frames at zero extra cost, and a stalled agent loop costs at most ~10 full-tree renders per second even on very large sessions. (Adaptive thresholds based on measured render latency were tried and rejected: latency noise made the frame rate stutter.)
 
@@ -93,9 +93,10 @@ All tools are model-callable, all commands are slash commands with Tab completio
 - **Auto-mode safe** — auto mode denies `ask_user_question` by policy (no unattended hangs)
 
 ### Todo
-- **Inline panel** — above-editor widget with roman-numeral phase tree (`Ⅰ. Scanner · 2/4`), `/todo toggle` expand/collapse; finished tasks auto-clear after `PI_MUSELINN_TODO_CLEAR_DELAY` seconds (default 60, `0` = instant, `-1` = manual) so completed plans fade out of the HUD instead of lingering
+- **Inline panel** — above-editor widget with roman-numeral phase tree (`Ⅰ. Scanner · 2/4`), `/todo toggle` expand/collapse; finished tasks auto-clear after `PI_LAMBOY_TODO_CLEAR_DELAY` seconds (default 60, `0` = instant, `-1` = manual) so completed plans fade out of the HUD instead of lingering
 - **`/todo` command** — full oh-my-pi phase model: `init`, `start`, `done`, `drop`, `rm`, `append`, `export`, `import`, `copy`, `edit`, `add_notes`, `update_details`, bare `/todo` prints Markdown
 - **`todo_list` tool** — model-driven task management with same ops
+- **Claim/release** — multi-session collaboration: a task claimed by another session cannot be re-claimed; `done`/`drop` implicitly release the claim
 - **Reminder system** — incomplete todos injected as `<system-reminder>` when agent stops (max 3 reminders, debounced)
 - **Markdown round-trip** — `/todo export/import` for persistence and sharing between sessions
 - **Notes** — per-task notes via `add_notes` / `update_details`
@@ -134,19 +135,19 @@ the repo root holds the pi adapter (entry, pi-tui components, tool registration)
 ```
 pi-lamboy-harness/
 ├── index.ts               entry (permission/plan wiring, truncation, module registration)
-├── packages/core/         @muselinn/core — pure logic, no host imports
+├── packages/core/         @lamboy/core — pure logic, no host imports
 │   ├── ports.ts           host contracts (PersistencePort, ScopeDirs)
 │   ├── text-utils.ts      visibleWidth & friends
 │   ├── shell-output.ts    control-sequence sanitizer
+│   ├── stream-rules/      stream entry rule engine (pure)
 │   ├── truncation/        oversized tool-result spill (pure)
 │   ├── completions.ts     slash-command argument completions
 │   ├── ask/               question spec + formatting (pure)
-│   ├── todo/              todo model + folding strategy (pure)
+│   ├── todo/              todo model + folding strategy + claim/release (pure)
 │   ├── goal/              Goal module (state machine, budgets, queue, persistence)
 │   ├── plan/              Plan module (tool whitelist, path guard, injection)
 │   ├── permission/        Permission module (policy chain, approval contract)
 │   ├── pause/             pause gate + full-screen overlay layout (pure, theme-injectable)
-│   ├── profile/           sub-agent profile definitions (unused — Phase 2 cleanup)
 │   └── tui/               box/config/parse/switch/timing/spinner (pure chrome parts)
 ├── pause/                 adapter: /pause overlay component
 ├── tui/                   adapter: MuselinnEditor + event wiring
@@ -157,7 +158,7 @@ pi-lamboy-harness/
 
 ## Tests
 
-Pure node-level unit tests, no model quota needed (18 suites, 600 assertions):
+Pure node-level unit tests, no model quota needed (14 suites, 568 assertions):
 
 ```bash
 npm test                                        # all suites (node tests/run-all.mjs)
@@ -167,24 +168,20 @@ npm run typecheck                               # full-package tsc (strict, es20
 or individually:
 
 ```bash
-node tests/musepi-config.test.mjs                 # MusePi config compat — 9
-node tests/permission.test.mjs                    # Permission policy chain — 26
-node tests/goal.test.mjs                          # Goal state machine + monotonic restore — 32
-node tests/plan.test.mjs                          # Plan mode round-trip + restore validation — 37
-node tests/tui.test.mjs                           # TUI collapse/keys/completions/spinner — 36
-node tests/tui-box.test.mjs                       # TUI box/config/probe/switch — 63
-node tests/tui-adapter.test.mjs                   # TUI adapter working-state render path — 4
-node tests/agent-lifecycle.test.mjs               # agent lifecycle events — 6
-node tests/ask.test.mjs                           # ask spec/dialog/answers/approval titles — 118
-node tests/tool-policy.test.mjs                  # tool policy gate — 13
-node tests/pause-gate.test.mjs                    # pause gate + full-screen render — 54
-node tests/todo.test.mjs                          # todo model + folding strategy — 99
-node tests/shell-output.test.mjs                  # output sanitizer — 21
-node tests/shimmer.test.mjs                     # shimmer sweep engine — 10
-node tests/truncation.test.mjs                    # tool-result spill + window-aware threshold — 21
 node tests/approval-rpc.test.mjs                  # RPC approval fallback (select/confirm) — 21
-node tests/renderer.test.mjs                      # incremental renderer buffer/tree — 16
+node tests/ask.test.mjs                           # ask spec/dialog/answers/approval titles — 118
+node tests/goal.test.mjs                          # Goal state machine + monotonic restore — 32
+node tests/pause-gate.test.mjs                    # pause gate + full-screen render — 54
+node tests/permission.test.mjs                    # Permission guard-layer chain — 20
+node tests/plan.test.mjs                          # Plan mode round-trip + restore validation — 37
+node tests/shell-output.test.mjs                  # output sanitizer — 21
+node tests/shimmer.test.mjs                       # shimmer sweep engine — 10
 node tests/stream-rules.test.mjs                  # stream entry rules — 14
+node tests/todo.test.mjs                          # todo model + folding strategy + claim/release — 117
+node tests/truncation.test.mjs                    # tool-result spill + window-aware threshold — 21
+node tests/tui-adapter.test.mjs                   # TUI adapter working-state render path — 4
+node tests/tui-box.test.mjs                       # TUI box/config/probe/switch — 63
+node tests/tui.test.mjs                           # TUI collapse/keys/completions/spinner — 36
 ```
 
 The suites run on Node 22/24/26 (22.6–22.17 via

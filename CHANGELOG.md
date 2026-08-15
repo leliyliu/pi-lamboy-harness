@@ -2,7 +2,18 @@
 
 All notable changes to pi-lamboy-harness, in reverse chronological order.
 
-## 0.10.0 (2026-02-11)
+## 0.11.0 (2026-08-14)
+
+Phase 2 per plans/personal-harness-roadmap.md:
+
+- Removed: agent-lifecycle, profile, renderer, core/config, tool-policy modules (dead code sweep)
+- Permission: guard-layer — dropped `.kimi-code`/`KIMI_CODE_HOME` instruction hierarchy (AGENTS.md + `~/.agents` kept), removed `evaluateForSubagent` and `isActive` passthrough
+- Renamed: all muselinn identifiers → lamboy (`PI_LAMBOY_*` env vars, `lamboy-tui.json`, `lamboy_*` entry types)
+- Added: todo claim/release multi-session semantics (`done`/`drop` implicitly release the claim)
+- Known limitation: todo markdown export/import does not round-trip claim state (same as `details`/`notes`)
+- Upgraded: pi devDeps to 0.84.x
+
+## 0.10.0 (2026-08-14)
 
 Personal fork of pi-muselinn-harness 0.9.22. Breaking reduction per plans/personal-harness-roadmap.md:
 

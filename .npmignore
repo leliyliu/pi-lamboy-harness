@@ -5,8 +5,6 @@ plans/
 # Build artifacts
 node_modules/
 *.js.map
-*.d.ts
-!*.d.ts
 dist/
 
 # OS junk
