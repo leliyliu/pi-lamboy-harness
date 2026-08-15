@@ -360,5 +360,53 @@ check("autoclear: untouched phases keep their tasks",
     return next.length === 1 && next[0].name === "New" && next[0].tasks.length === 1;
   })());
 
+// ── claim/release (multi-session semantics) ─────────────────────
+
+// 1. claim a pending task → claimedBy set, claimedAt timestamped
+const cr1 = applyOp(makePhases(), { op: "claim", task: "Build picker UI", sessionId: "alice" });
+check("claim: sets claimedBy", cr1.phases[1].tasks[0].claimedBy === "alice");
+check("claim: sets claimedAt timestamp", typeof cr1.phases[1].tasks[0].claimedAt === "number" && cr1.phases[1].tasks[0].claimedAt > 0);
+check("claim: no errors", cr1.errors.length === 0);
+
+// 2. claim a task already claimed by another session → error, original claimer kept
+const cr2 = applyOp(cr1.phases, { op: "claim", task: "Build picker UI", sessionId: "bob" });
+check("claim: other session blocked", cr2.errors.length > 0);
+check("claim: original claimedBy unchanged", cr2.phases[1].tasks[0].claimedBy === "alice");
+
+// 3. same session re-claim → idempotent success
+const cr3 = applyOp(cr1.phases, { op: "claim", task: "Build picker UI", sessionId: "alice" });
+check("claim: own re-claim idempotent", cr3.errors.length === 0 && cr3.phases[1].tasks[0].claimedBy === "alice");
+
+// 4. release someone else's claim → error, claim kept
+const cr4 = applyOp(cr1.phases, { op: "release", task: "Build picker UI", sessionId: "bob" });
+check("release: other session blocked", cr4.errors.length > 0);
+check("release: claim kept on blocked release", cr4.phases[1].tasks[0].claimedBy === "alice");
+
+// 5. release own claim → fields cleared
+const cr5 = applyOp(cr1.phases, { op: "release", task: "Build picker UI", sessionId: "alice" });
+check("release: own claim clears claimedBy", cr5.errors.length === 0 && cr5.phases[1].tasks[0].claimedBy === undefined);
+check("release: own claim clears claimedAt", cr5.phases[1].tasks[0].claimedAt === undefined);
+
+// 6. done implicitly releases a claimed task
+const cr6 = applyOp(cr1.phases, { op: "done", task: "Build picker UI", sessionId: "alice" });
+check("done: claimed task completes", cr6.phases[1].tasks[0].status === "completed");
+check("done: implicitly releases claim", cr6.phases[1].tasks[0].claimedBy === undefined && cr6.phases[1].tasks[0].claimedAt === undefined);
+
+// 7. sessionId defaults to "main" when absent
+const cr7 = applyOp(makePhases(), { op: "claim", task: "Build picker UI" });
+check("claim: default sessionId is main", cr7.errors.length === 0 && cr7.phases[1].tasks[0].claimedBy === "main");
+
+// claim unknown task → error
+const cr8 = applyOp(makePhases(), { op: "claim", task: "nonexistent", sessionId: "alice" });
+check("claim: not found error", cr8.errors.length > 0);
+
+// release unknown task → error
+const cr9 = applyOp(makePhases(), { op: "release", task: "nonexistent", sessionId: "alice" });
+check("release: not found error", cr9.errors.length > 0);
+
+// release an unclaimed task → error (must be claimed first)
+const cr10 = applyOp(makePhases(), { op: "release", task: "Build picker UI", sessionId: "alice" });
+check("release: unclaimed task errors", cr10.errors.length > 0);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

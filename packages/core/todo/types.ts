@@ -6,13 +6,15 @@
 // ============================================================
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "abandoned";
-export type TodoOperation = "init" | "start" | "done" | "rm" | "drop" | "append" | "add_notes" | "update_details" | "view";
+export type TodoOperation = "init" | "start" | "done" | "rm" | "drop" | "append" | "add_notes" | "update_details" | "view" | "claim" | "release";
 
 export interface TodoItem {
   content: string;
   status: TodoStatus;
   details?: string;
   notes?: string[];
+  claimedBy?: string;
+  claimedAt?: number;
 }
 
 export interface TodoPhase {
@@ -39,6 +41,7 @@ export type TodoOpParams = {
   notes?: string[];
   details?: string;
   items?: string[];
+  sessionId?: string;
 };
 
 export const TODO_ENTRY_TYPE = "lamboy_todo";
@@ -70,6 +73,8 @@ export function cloneTask(task: TodoItem): TodoItem {
     status: task.status,
     ...(task.details !== undefined ? { details: task.details } : {}),
     ...(task.notes !== undefined ? { notes: [...task.notes] } : {}),
+    ...(task.claimedBy !== undefined ? { claimedBy: task.claimedBy } : {}),
+    ...(task.claimedAt !== undefined ? { claimedAt: task.claimedAt } : {}),
   };
 }
 
@@ -245,18 +250,21 @@ function markTasks(
   entry: TodoOpParams,
   targetStatus: TodoStatus,
   errors: string[],
+  releaseClaims = false,
 ): TodoPhase[] {
   const clone = clonePhases(phases);
   if (entry.task) {
     const resolved = resolveTaskOrError(clone, entry.task, errors);
     if (!resolved) return phases;
     resolved.task.status = targetStatus;
+    if (releaseClaims) { delete resolved.task.claimedBy; delete resolved.task.claimedAt; }
   } else if (entry.phase) {
     const resolved = resolvePhaseOrError(clone, entry.phase, errors);
     if (!resolved) return phases;
     for (const task of resolved.tasks) {
       if (task.status === "pending" || task.status === "in_progress") {
         task.status = targetStatus;
+        if (releaseClaims) { delete task.claimedBy; delete task.claimedAt; }
       }
     }
   } else {
@@ -265,10 +273,44 @@ function markTasks(
       for (const task of phase.tasks) {
         if (task.status === "pending" || task.status === "in_progress") {
           task.status = targetStatus;
+          if (releaseClaims) { delete task.claimedBy; delete task.claimedAt; }
         }
       }
     }
   }
+  return clone;
+}
+
+function claimTasks(phases: TodoPhase[], entry: TodoOpParams, errors: string[]): TodoPhase[] {
+  const sessionId = entry.sessionId || "main";
+  if (!entry.task) { errors.push("Missing task content for claim"); return phases; }
+  const found = findTaskByContent(phases, entry.task);
+  if (!found) { errors.push(`Task "${entry.task}" not found`); return phases; }
+  if (found.task.claimedBy && found.task.claimedBy !== sessionId) {
+    errors.push(`Task "${entry.task}" is already claimed by ${found.task.claimedBy}`);
+    return phases;
+  }
+  const clone = clonePhases(phases);
+  const resolved = findTaskByContent(clone, entry.task);
+  if (!resolved) return phases; // unreachable
+  resolved.task.claimedBy = sessionId;
+  if (resolved.task.claimedAt === undefined) resolved.task.claimedAt = Date.now();
+  return clone;
+}
+
+function releaseTasks(phases: TodoPhase[], entry: TodoOpParams, errors: string[]): TodoPhase[] {
+  const sessionId = entry.sessionId || "main";
+  if (!entry.task) { errors.push("Missing task content for release"); return phases; }
+  const found = findTaskByContent(phases, entry.task);
+  if (!found) { errors.push(`Task "${entry.task}" not found`); return phases; }
+  if (!found.task.claimedBy) { errors.push(`Task "${entry.task}" is not claimed`); return phases; }
+  if (found.task.claimedBy !== sessionId) {
+    errors.push(`Task "${entry.task}" is claimed by ${found.task.claimedBy}, not ${sessionId}`);
+    return phases;
+  }
+  const clone = clonePhases(phases);
+  const resolved = findTaskByContent(clone, entry.task);
+  if (resolved) { delete resolved.task.claimedBy; delete resolved.task.claimedAt; }
   return clone;
 }
 
@@ -290,7 +332,7 @@ function applyEntry(phases: TodoPhase[], entry: TodoOpParams, errors: string[]):
       return deEscalated;
     }
     case "done":
-      return markTasks(phases, entry, "completed", errors);
+      return markTasks(phases, entry, "completed", errors, true);
     case "drop":
       return markTasks(phases, entry, "abandoned", errors);
     case "rm":
@@ -319,6 +361,10 @@ function applyEntry(phases: TodoPhase[], entry: TodoOpParams, errors: string[]):
     }
     case "view":
       return clonePhases(phases);
+    case "claim":
+      return claimTasks(phases, entry, errors);
+    case "release":
+      return releaseTasks(phases, entry, errors);
     default:
       errors.push(`Unknown operation: ${entry.op}`);
       return phases;

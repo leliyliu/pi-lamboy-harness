@@ -175,7 +175,7 @@ check("config: modelInBorder true persists",
 fs.writeFileSync(path.join(tmpHome, ".pi", "agent", "lamboy-tui.json"),
   JSON.stringify({ modelInBorder: "yes" }), "utf-8");
 check("config: non-boolean modelInBorder → default false",
-  config.loadTuiConfig(fs.mkdtempSync(path.join(os.tmpdir(), "lamboy-tui-cwd"))).modelInBorder === false);
+  config.loadTuiConfig(fs.mkdtempSync(path.join(os.tmpdir(), "lamboy-tui-cwd3-"))).modelInBorder === false);
 // restore the style used by the project-override checks below
 config.saveTuiConfig({ style: "compact", modelInBorder: false });
 
@@ -192,7 +192,7 @@ check("config: invalid project modelInBorder falls back to global",
 // invalid global values fall back to defaults
 fs.writeFileSync(path.join(tmpHome, ".pi", "agent", "lamboy-tui.json"),
   JSON.stringify({ style: "weird", layout: 42 }), "utf-8");
-const sane = config.loadTuiConfig(fs.mkdtempSync(path.join(os.tmpdir(), "lamboy-tui-cwd")));
+const sane = config.loadTuiConfig(fs.mkdtempSync(path.join(os.tmpdir(), "lamboy-tui-cwd2-")));
 check("config: invalid global values → defaults",
   sane.style === "boxed" && sane.modelInBorder === false, JSON.stringify(sane));
 

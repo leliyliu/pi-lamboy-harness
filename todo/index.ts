@@ -288,12 +288,13 @@ export function registerTodoList(pi: any): void {
   pi.registerTool({
     name: "todo_list",
     label: "Todo List",
-    promptSnippet: "todo_list: manage a phased task plan (init / start / done / drop / rm / append / view)",
+    promptSnippet: "todo_list: manage a phased task plan (init / start / done / drop / rm / append / view / claim / release)",
     promptGuidelines: [
       "Use op=init with list=[{phase, items}] to initialize a full phased plan covering the whole request — list is the ONLY field for init; each entry MUST have both phase and items",
       "For a single-phase init use list=[{phase, items}] too (one entry) — never pass objects in the top-level items field (it only takes plain strings)",
       "Use op=start task=... to mark a task in_progress (only one in_progress at a time)",
       "Use op=done task=... to mark a task completed; omit task to mark all open tasks done",
+      "Use op=claim task=... to claim a task for this session (blocks other sessions); op=release task=... to release it",
       "Use op=append phase=... items=[...] to add tasks to an existing phase",
       "Keep tasks to concise 5-10 word labels",
       "Call todo_list after completing tasks to keep progress visible — reminders fire if you stop with open items",
@@ -303,7 +304,7 @@ export function registerTodoList(pi: any): void {
       properties: {
         op: {
           type: "string",
-          enum: ["init", "start", "done", "rm", "drop", "append", "add_notes", "update_details", "view"],
+          enum: ["init", "start", "done", "rm", "drop", "append", "add_notes", "update_details", "view", "claim", "release"],
           description: "Operation to apply",
         },
         list: {
@@ -320,7 +321,7 @@ export function registerTodoList(pi: any): void {
         },
         task: {
           type: "string",
-          description: "Task content to target (for start/done/drop/rm)",
+          description: "Task content to target (for start/done/drop/rm/claim/release)",
         },
         phase: {
           type: "string",
@@ -339,7 +340,7 @@ export function registerTodoList(pi: any): void {
       },
       required: ["op"],
     },
-    async execute(_toolCallId: string, params: any, _signal: any, _onUpdate: any, _ctx: any) {
+    async execute(_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) {
       const op = String(params?.op ?? "");
       const entry: TodoOpParams = {
         op: op as TodoOpParams["op"],
@@ -348,6 +349,10 @@ export function registerTodoList(pi: any): void {
         task: params.task,
         phase: params.phase,
         items: params.items,
+        sessionId:
+          (ctx?.sessionManager?.getSessionId?.() as string | undefined) ??
+          (ctx?.sessionId as string | undefined) ??
+          "main",
       };
 
       const { phases, errors } = applyOp(rt.phases, entry);
