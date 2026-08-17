@@ -25,6 +25,7 @@ import { registerTodoList, registerTodoReminders, bindTodoSession, clearTodoSess
 import { phasesToMarkdown, markdownToPhases, applyOp, TodoPhase, TodoItem } from "./packages/core/todo/types";
 import { registerTui, setTuiBadgeProvider } from "./tui/index";
 import { registerPerfTools } from "./perf/index";
+import { registerLatexTools } from "./latex/index";
 import { agentPauseGate } from "./packages/core/pause/gate";
 import { registerPauseCommands } from "./pause/commands";
 export default function (pi: ExtensionAPI) {
@@ -330,6 +331,7 @@ export default function (pi: ExtensionAPI) {
   registerTodoList(pi);
   registerTodoReminders(pi);
   registerPerfTools(pi);
+  registerLatexTools(pi);
   goalManager.registerCommands(pi);
 
   // ── Register plan tools and commands (from plan/ module) ──

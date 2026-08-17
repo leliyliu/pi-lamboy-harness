@@ -11,3 +11,9 @@ Thumbs.db
 
 # perf-lab benchmark results
 .perf/
+
+# latex build products (tectonic writes .aux/.log/.pdf next to sources)
+*.aux
+*.log
+*.pdf
+!tests/fixtures/**

@@ -18,6 +18,7 @@
     "todo/**/*.ts",
     "tui/**/*.ts",
     "pause/**/*.ts",
-    "perf/**/*.ts"
+    "perf/**/*.ts",
+    "latex/**/*.ts"
   ]
 }
