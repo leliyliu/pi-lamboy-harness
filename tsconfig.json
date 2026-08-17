@@ -17,6 +17,7 @@
     "ask/**/*.ts",
     "todo/**/*.ts",
     "tui/**/*.ts",
-    "pause/**/*.ts"
+    "pause/**/*.ts",
+    "perf/**/*.ts"
   ]
 }

@@ -24,6 +24,7 @@ import { shouldTruncate, truncationPathFor, buildTruncatedPreview, truncationThr
 import { registerTodoList, registerTodoReminders, bindTodoSession, clearTodoSession, restoreTodos, rt, persist, refreshWidget, togglePanel, syncTodoAutoClearTimer } from "./todo/index";
 import { phasesToMarkdown, markdownToPhases, applyOp, TodoPhase, TodoItem } from "./packages/core/todo/types";
 import { registerTui, setTuiBadgeProvider } from "./tui/index";
+import { registerPerfTools } from "./perf/index";
 import { agentPauseGate } from "./packages/core/pause/gate";
 import { registerPauseCommands } from "./pause/commands";
 export default function (pi: ExtensionAPI) {
@@ -328,6 +329,7 @@ export default function (pi: ExtensionAPI) {
   registerAskUserQuestion(pi);
   registerTodoList(pi);
   registerTodoReminders(pi);
+  registerPerfTools(pi);
   goalManager.registerCommands(pi);
 
   // ── Register plan tools and commands (from plan/ module) ──

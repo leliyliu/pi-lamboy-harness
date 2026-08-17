@@ -3,6 +3,7 @@ export interface RunSpec {
   host: string; workdir: string; command: string;
   runs: number; warmup: number; env?: Record<string, string>;
   parser?: "auto" | "json-report" | "stdout-number";
+  label?: string;
 }
 export interface BenchStats {
   runId: string; label?: string; spec: RunSpec;

@@ -24,6 +24,7 @@
     "todo/",
     "tui/",
     "pause/",
+    "perf/",
     "README.md",
     "README.zh-CN.md",
     "LICENSE"
