@@ -179,7 +179,7 @@ pi-lamboy-harness/
 
 ## Tests
 
-Pure node-level unit tests, no model quota needed (21 suites, 643 assertions):
+Pure node-level unit tests, no model quota needed (21 suites, 631 assertions):
 
 ```bash
 npm test                                        # all suites (node tests/run-all.mjs)

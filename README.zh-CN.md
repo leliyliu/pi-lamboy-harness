@@ -168,7 +168,7 @@ pi-lamboy-harness/
 
 ## 测试
 
-无需模型额度的 node 级单元测试（21 个套件，643 项断言）：
+无需模型额度的 node 级单元测试（21 个套件，631 项断言）：
 
 ```bash
 npm test                                        # 全部套件（node tests/run-all.mjs）
