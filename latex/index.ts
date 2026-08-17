@@ -70,6 +70,7 @@ function formatCompileMarkdown(r: CompileResult, texFile: string): string {
   for (const e of r.errors) {
     lines.push(`| ${e.severity} | ${e.file} | ${e.line} | ${e.message} | ${e.hint ?? ""} |`);
   }
+  lines.push("", "**raw output tail**", "", "```", String(r.rawTail ?? "(empty)"), "```");
   return lines.join("\n");
 }
 
@@ -200,7 +201,7 @@ export function registerLatexTools(pi: any): void {
     async execute(_toolCallId: string, params: any, _signal: any, _onUpdate: any, _ctx: any) {
       try {
         const out = await runCompile(String(params?.texFile ?? ""), Array.isArray(params?.args) ? params.args : []);
-        return { content: [{ type: "text", text: out.markdown, details: { ok: out.ok, pdfPath: out.pdfPath, errors: out.errors } }] };
+        return { content: [{ type: "text", text: out.markdown, details: { ok: out.ok, pdfPath: out.pdfPath, errors: out.errors, rawTail: out.rawTail } }] };
       } catch (e) {
         return { content: [{ type: "text", text: `latex_compile failed: ${String(e)}` }] };
       }
