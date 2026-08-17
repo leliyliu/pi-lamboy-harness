@@ -17,6 +17,7 @@
 | 2026-08-14 | §6 agent-lifecycle（76 行死代码）：**删除**，不做事件桥 | ✅ 已批准 |
 | 2026-08-14 | §4 muselinn 命名：**立即全改**（零历史负担，一次到位） | ✅ 已批准 |
 | 2026-08-14 | 终审 B1 裁定：安全守卫（destructive/sensitive/git-control）重排至 auto-approve 之前，auto 模式危险操作从静默批准改为必问（无人值守降级 deny）；lock 版本同步 | ✅ 已执行 |
+| 2026-08-14 | Phase 3 perf-lab 落地（stats/parsers/remote core + 3 工具 adapter）；真实 GPU 验收待环境 | ✅ 已执行 |
 
 ---
 
@@ -386,9 +387,10 @@ pi 原生 package 系统（`pi` manifest：extensions/skills/prompts/themes + ga
 - muselinn 兼容命名保留清单：已改名 `lamboy-tui.json`、`PI_LAMBOY_*` 环境变量、`lamboy_goal/plan/permission/todo` entry 类型、`pi-lamboy-harness` tmpdir 回退名
 - 后续增强（非阻塞）：todo markdown export/import 不往返 claim 状态（与 `details`/`notes` 同属已知有损格式）
 
-**Phase 3 — 性能探索成型（~1 周，优先级提升）**
-- 自建 perf-lab（§6.2），以一个真实算子（如某 CUDA kernel 或 cpp 例程）benchmark+profile 为验收对象
-- 打通 Goal→multiloop→perf-lab→lifeline 链路，长时无人值守跑一轮
+**Phase 3 — 性能探索成型（~1 周，优先级提升） ✅ 已完成（2026-08-14）**
+- perf-lab（§6.2）已落地：core 层（stats/parsers/remote 纯逻辑）+ adapter 3 工具（bench_run / profile_parse / metric_compare），18 套件全绿、typecheck 0、`pi -e` 加载确认三工具注册
+- 验收状态：mock-ssh 覆盖完成；**真实 GPU 验收（kunshan-quant 上的实际 kernel）待环境可用时补验**
+- 待办：打通 Goal→multiloop→perf-lab→lifeline 链路，长时无人值守跑一轮（随真实 GPU 验收一起）
 
 **Phase 4 — 学术场景成型（~1 周）**
 - 安装试用 academic-research-skills / pi-bib / pi-critique，跑通一篇已有论文的 review→revise→bib-check 流程

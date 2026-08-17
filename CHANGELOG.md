@@ -2,6 +2,14 @@
 
 All notable changes to pi-lamboy-harness, in reverse chronological order.
 
+## 0.12.0 (2026-08-14)
+
+Phase 3 per plans/2026-08-14-perf-lab-design.md:
+
+- Added: perf-lab — bench_run (remote GPU benchmark, N-run stats, env snapshot), profile_parse (torch profiler trace → hotspot table), metric_compare (Mann-Whitney significance, improve/regress/noise verdict)
+- Results persist to `.perf/<run-id>.json` for pi-multiloop verify-command consumption
+- Known limitation: real-GPU acceptance on kunshan-quant pending environment availability; mock-ssh coverage complete
+
 ## 0.11.0 (2026-08-14)
 
 Phase 2 per plans/personal-harness-roadmap.md:

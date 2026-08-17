@@ -107,6 +107,12 @@ All tools are model-callable, all commands are slash commands with Tab completio
 - **Oversized tool results spill to disk** — results over the spill threshold are written to `<sessionDir>/tool-results/` and replaced in context with a sanitized head+tail preview carrying the `output_path` and read-paging instructions (`toolResultTruncation` pattern)
 - **Window-aware threshold** — the threshold scales with the active model's context window (`max(40k, window × 4 chars/token)`, capped at 800k chars ≈ 200k tokens), so 1M-context models keep far more output in-context; `PI_TRUNCATION_THRESHOLD` overrides it explicitly
 
+### Perf lab
+- **Measurement layer** — remote GPU benchmarks via ssh, PyTorch profiler analysis, and A/B significance testing, decoupled from pi-multiloop (which consumes `.perf/<run-id>.json` via verify commands)
+- **`bench_run`** — N-run benchmark with MAD outlier rejection and P50/P95 (not the mean — GPU timing is noisy), plus an env snapshot (nvidia-smi model/driver/clocks) so cross-day comparisons catch environment drift
+- **`profile_parse`** — torch profiler trace → hotspot table (op/kernel, self-time %, calls, shapes) the model can reason over directly
+- **`metric_compare`** — Mann-Whitney significance verdict (improve/regress/noise); when noise dominates it advises more runs instead of a false call
+
 ## Commands
 
 | Command | Description |
@@ -126,6 +132,9 @@ All tools are model-callable, all commands are slash commands with Tab completio
 | `enter_plan_mode` / `exit_plan_mode` | Plan mode |
 | `ask_user_question` | Tabbed structured questions (multi-select, Other free text) |
 | `todo_list` | Model-driven task plan with inline panel |
+| `bench_run` | Remote GPU benchmark (ssh to host, N-run P50/P95/MAD stats, env snapshot); results persist to `.perf/<run-id>.json` for pi-multiloop verify-command consumption |
+| `profile_parse` | Parse a PyTorch profiler trace into a hotspot table (op/kernel, self-time %, calls, shapes) |
+| `metric_compare` | Mann-Whitney significance test between two `.perf/` results → improve/regress/noise verdict |
 
 ## Architecture
 
@@ -148,17 +157,19 @@ pi-lamboy-harness/
 │   ├── plan/              Plan module (tool whitelist, path guard, injection)
 │   ├── permission/        Permission module (policy chain, approval contract)
 │   ├── pause/             pause gate + full-screen overlay layout (pure, theme-injectable)
+│   ├── perf/              bench stats / torch-profile parse / ssh assembly (pure)
 │   └── tui/               box/config/parse/switch/timing/spinner (pure chrome parts)
 ├── pause/                 adapter: /pause overlay component
 ├── tui/                   adapter: LamboyEditor + event wiring
 ├── ask/                   adapter: question dialog + ask_user_question tool
 ├── todo/                  adapter: todo_list tool + inline panel widget
+├── perf/                  adapter: bench_run / profile_parse / metric_compare tools
 └── tests/                 node-level unit tests (below)
 ```
 
 ## Tests
 
-Pure node-level unit tests, no model quota needed (14 suites, 568 assertions):
+Pure node-level unit tests, no model quota needed (18 suites, 613 assertions):
 
 ```bash
 npm test                                        # all suites (node tests/run-all.mjs)
@@ -173,6 +184,10 @@ node tests/ask.test.mjs                           # ask spec/dialog/answers/appr
 node tests/goal.test.mjs                          # Goal state machine + monotonic restore — 32
 node tests/pause-gate.test.mjs                    # pause gate + full-screen render — 54
 node tests/permission.test.mjs                    # Permission guard-layer chain — 20
+node tests/perf-adapter.test.mjs                  # perf adapter mock-ssh full chain — 9
+node tests/perf-parsers.test.mjs                  # torch profiler + stdout bench extractor — 10
+node tests/perf-remote.test.mjs                   # ssh command assembly snapshot — 15
+node tests/perf-stats.test.mjs                    # quantiles/MAD/outliers/Mann-Whitney/compare — 11
 node tests/plan.test.mjs                          # Plan mode round-trip + restore validation — 37
 node tests/shell-output.test.mjs                  # output sanitizer — 21
 node tests/shimmer.test.mjs                       # shimmer sweep engine — 10

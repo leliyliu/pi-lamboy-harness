@@ -96,6 +96,12 @@ pi                                                      # 重启 pi，然后试�
 - **超大工具结果落盘** — 超过截断阈值的结果写入 `<sessionDir>/tool-results/`，上下文中只保留净化后的头尾预览 + `output_path`，附 read 分页说明（`toolResultTruncation` 模式）
 - **窗口感知阈值** — 阈值随当前模型上下文窗口缩放（`max(40k, 窗口 × 4 字符/token)`，上限 800k 字符 ≈ 200k token），1M 上下文的模型可保留远多输出；`PI_TRUNCATION_THRESHOLD` 可显式覆盖
 
+### Perf lab 模块（性能测量层）
+- **测量层定位** — 经 ssh 执行远程 GPU 基准、PyTorch profiler 分析与 A/B 显著性检验，与 pi-multiloop 松耦合（后者通过 verify 命令消费 `.perf/<run-id>.json`）
+- **`bench_run`** — N 轮基准 + MAD 离群剔除 + P50/P95（而非均值——GPU 计时噪声大），并采集环境快照（nvidia-smi 型号/驱动/时钟），跨日对比可发现环境漂移
+- **`profile_parse`** — torch profiler trace → 热点表（op/kernel、耗时占比、调用次数、形状），模型可直接推理
+- **`metric_compare`** — Mann-Whitney 显著性判定（improve/regress/noise）；噪声主导时建议增加轮次而非误判
+
 ## 命令
 
 | 命令 | 说明 |
@@ -115,6 +121,9 @@ pi                                                      # 重启 pi，然后试�
 | `enter_plan_mode` / `exit_plan_mode` | Plan Mode |
 | `ask_user_question` | 标签页结构化提问（多选、Other 自由文本） |
 | `todo_list` | 模型驱动的任务计划（内联面板） |
+| `bench_run` | 远程 GPU 基准（ssh 到主机，N 轮 P50/P95/MAD 统计 + 环境快照）；结果落盘 `.perf/<run-id>.json` 供 pi-multiloop 的 verify 命令消费 |
+| `profile_parse` | 解析 PyTorch profiler trace → 热点表（op/kernel、耗时占比、调用次数、形状） |
+| `metric_compare` | 两次 `.perf/` 结果的 Mann-Whitney 显著性检验 → improve/regress/noise 判定 |
 
 ## 架构
 
@@ -137,17 +146,19 @@ pi-lamboy-harness/
 │   ├── plan/              Plan 模块（工具白名单 + 路径守卫 + 注入）
 │   ├── permission/        Permission 模块（策略链 + 审批契约）
 │   ├── pause/             暂停门禁 + 全屏遮罩布局（纯函数，主题可注入）
+│   ├── perf/              bench 统计 / torch-profile 解析 / ssh 组装（纯函数）
 │   └── tui/               box/config/parse/switch/timing/spinner（纯 chrome 件）
 ├── pause/                 适配层：/pause 遮罩组件
 ├── tui/                   适配层：LamboyEditor + 事件接线
 ├── ask/                   适配层：提问对话框 + ask_user_question 工具
 ├── todo/                  适配层：todo_list 工具 + 内联面板
+├── perf/                  适配层：bench_run / profile_parse / metric_compare 工具
 └── tests/                 node 级单元测试（见下）
 ```
 
 ## 测试
 
-无需模型额度的 node 级单元测试（14 个套件，568 项断言）：
+无需模型额度的 node 级单元测试（18 个套件，613 项断言）：
 
 ```bash
 npm test                                        # 全部套件（node tests/run-all.mjs）
@@ -162,6 +173,10 @@ node tests/ask.test.mjs                           # ask 规格/对话框/答案/
 node tests/goal.test.mjs                          # Goal 状态机 + 单调恢复 32 项
 node tests/pause-gate.test.mjs                    # 暂停门禁 + 全屏渲染 54 项
 node tests/permission.test.mjs                    # Permission 守卫层链 20 项
+node tests/perf-adapter.test.mjs                  # perf 适配器 mock-ssh 全链路 9 项
+node tests/perf-parsers.test.mjs                  # torch profiler + stdout 基准提取 10 项
+node tests/perf-remote.test.mjs                   # ssh 命令组装快照 15 项
+node tests/perf-stats.test.mjs                    # 分位数/MAD/离群/Mann-Whitney/对比 11 项
 node tests/plan.test.mjs                          # Plan 模式往返 + 恢复校验 37 项
 node tests/shell-output.test.mjs                  # 输出净化器 21 项
 node tests/shimmer.test.mjs                       # shimmer 扫描动画引擎 10 项
