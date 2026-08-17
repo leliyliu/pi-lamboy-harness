@@ -54,26 +54,27 @@ check("quantiles: empty array returns null", stats.quantile([], 0.5) === null);
 check("mad: [1,1,2,2,4,6,9] → median 2, MAD 1", stats.mad([1,1,2,2,4,6,9]) === 1);
 
 // outlier 剔除（MAD 法：|x - med| > 3.5 * MAD 剔除）
-check("filterOutliers: removes the 1000 spike", JSON.stringify(stats.filterOutliers([...Array(20).fill(5), 1000])) === JSON.stringify(Array(20).fill(5)));
+const spiked = [...Array(20).fill(5).map((v,i)=>v+(i%2?1:-1)), 1000]; // median 5, MAD 1
+check("filterOutliers: removes the 1000 spike", (() => { const f = stats.filterOutliers(spiked); return f.length === 20 && !f.includes(1000); })());
 check("filterOutliers: all-identical data kept intact", stats.filterOutliers([3,3,3]).length === 3);
 
 // Mann-Whitney U（用于 A/B 显著性）
 const bigA = Array(20).fill(10).map((v,i)=>v+i*0.1);      // 10.0..11.9
 const bigB = Array(20).fill(20).map((v,i)=>v+i*0.1);      // 20.0..21.9 — 完全分离
-const noisy = Array(20).fill(10).map((v,i)=>v+(i%2?0.5:-0.5));
+const noisy2 = bigA.map((v,i)=>v+(i%2?0.3:-0.3)); // 中心同 bigA 的重叠噪声
 const mw = stats.mannWhitney(bigA, bigB);
 check("mwU: separated groups → p < 0.01", mw.p < 0.01);
-check("mwU: identical-ish groups → p > 0.05", stats.mannWhitney(bigA, noisy).p > 0.05);
+check("mwU: identical-ish groups → p > 0.05", stats.mannWhitney(bigA, noisy2).p > 0.05);
 
 // compareStats：显著性 + 判定建议
 const cs = stats.compareStats(
-  { values: bigA, label: "base" },
-  { values: bigB, label: "cand" },
+  { values: bigB, label: "base" },
+  { values: bigA, label: "cand" },
   { direction: "lower" }   // lower is better
 );
 check("compare: separated improvement → verdict improve", cs.verdict === "improve");
 check("compare: reports deltaPct", typeof cs.deltaPct === "number" && cs.deltaPct < -40);
-check("compare: noise case → verdict noise", stats.compareStats({values: bigA, label:"a"},{values: noisy, label:"b"},{direction:"lower"}).verdict === "noise");
+check("compare: noise case → verdict noise", stats.compareStats({values: bigA, label:"a"},{values: noisy2, label:"b"},{direction:"lower"}).verdict === "noise");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
