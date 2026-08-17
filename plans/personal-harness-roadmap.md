@@ -16,6 +16,7 @@
 | 2026-08-14 | §4 AGENTS.md：**删 Kimi 留标准**——删 `.kimi-code/` 与 `$KIMI_CODE_HOME`，保留项目裸 AGENTS.md + `~/.agents/` | ✅ 已批准 |
 | 2026-08-14 | §6 agent-lifecycle（76 行死代码）：**删除**，不做事件桥 | ✅ 已批准 |
 | 2026-08-14 | §4 muselinn 命名：**立即全改**（零历史负担，一次到位） | ✅ 已批准 |
+| 2026-08-14 | 终审 B1 裁定：安全守卫（destructive/sensitive/git-control）重排至 auto-approve 之前，auto 模式危险操作从静默批准改为必问（无人值守降级 deny）；lock 版本同步 | ✅ 已执行 |
 
 ---
 

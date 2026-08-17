@@ -70,18 +70,18 @@ function makeCtx(confirmAnswer) {
 const evalIn = (tool, input, cwd, approve) =>
   permissionManager.evaluate(tool, input, cwd, makeCtx(approve));
 
-// ── 1. auto 模式: write .env 全自动批准（不弹对话框）────────────────────────
+// ── 1. auto 模式: write .env 先触发敏感文件 ask（用户拒绝 → block）──────────
 permissionManager.resetHistory();
 permissionManager.setMode("auto");
 {
   const blocked = await evalIn("write", { path: ".env", content: "SECRET=1" }, cleanCwd, false);
-  check("auto: write .env is auto-approved (no interception)", blocked === undefined, JSON.stringify(blocked));
+  check("auto: write .env asks before auto-approve (denied => block)", blocked?.block === true, JSON.stringify(blocked));
 }
 
-// ── 2. auto 模式: bash rm -rf 也全自动批准 ──────────────────────────────────
+// ── 2. auto 模式: bash rm -rf 先触发破坏性 ask（用户拒绝 → block）────────────
 {
   const blocked = await evalIn("bash", { command: "rm -rf /tmp/x" }, cleanCwd, false);
-  check("auto: bash 'rm -rf' is auto-approved (no interception)", blocked === undefined, JSON.stringify(blocked));
+  check("auto: bash 'rm -rf' asks before auto-approve (denied => block)", blocked?.block === true, JSON.stringify(blocked));
 }
 
 // ── 2b. auto 模式: AskUserQuestion 必须被拒绝 ───────────────────────────────

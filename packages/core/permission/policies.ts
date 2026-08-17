@@ -324,10 +324,12 @@ export const policy18FallbackAsk: Policy = {
 // ── Policy Chain ─────────────────────────────────────────────────────────
 // Array order == evaluation order.
 //
-// AUTO mode:  AskUserQuestion denied (#2) → UserDeny (#4) → AutoApprove (#5).
-//             AutoApprove fires BEFORE destructive/sensitive/git safety checks,
-//             so auto mode is truly automatic — no dialogs. User-configured
-//             deny rules are still respected.
+// AUTO mode:  AskUserQuestion denied (#2) → UserDeny (#4) → safety checks
+//             (destructive #4b, sensitive file #12, .git control #13) →
+//             AutoApprove (#5). Auto mode auto-approves ordinary work, but
+//             destructive/sensitive operations still ask — degrading to a
+//             block in no-UI sessions. User-configured deny rules are always
+//             respected.
 //
 // YOLO mode:  Safety checks (destructive, sensitive file, .git control) run
 //             BEFORE YoloApprove (#15). So yolo still asks for dangerous ops
@@ -339,12 +341,13 @@ export const policyChain: Policy[] = [
   policy02AutoAskDeny,
   policy03PlanGuard,
   policy04UserDeny,
-  // AutoApprove fires early — auto mode is fully automatic
-  policy05AutoApprove,
-  // Safety checks (only effective in non-auto modes)
+  // Safety checks first — even auto mode asks on destructive/sensitive ops
+  // (unattended no-UI sessions degrade these asks to a block).
   policy04bDestructiveAsk,
   policy12SensitiveFile,
   policy13GitControl,
+  // AutoApprove fires after safety checks — auto approves ordinary work only.
+  policy05AutoApprove,
   // Session and user policies
   policy06SessionHistory,
   policy07UserAsk,
