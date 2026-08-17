@@ -8,3 +8,6 @@ Thumbs.db
 
 # local worktrees (superpowers SDD)
 .worktrees/
+
+# perf-lab benchmark results
+.perf/

@@ -58,12 +58,18 @@ check("script: measured run emits PERF_VAL grep extraction", script.includes("gr
 // ssh 命令组装
 const ssh = remote.buildSshCommand("kunshan-quant", "/workspace/x", script);
 check("ssh: host first", ssh[0] === "ssh" && ssh[1] === "kunshan-quant");
-check("ssh: cd workdir && exec script", ssh[2].includes("cd /workspace/x"));
+check("ssh: cd workdir && exec script", ssh[2].includes('cd "/workspace/x"'));
 check("ssh: uses bash -lc wrapper", ssh[2].startsWith("bash -lc"));
 check("ssh: single quotes escaped in wrapper", ssh[2].includes("'\\''") || (() => { // inner ' became '\''
   const open = (ssh[2].match(/'/g) || []).length;
   return open >= 4; // wrapper open+close plus escaped pairs
 })());
+
+// shQuote：workdir 含空格/单引号时在远端 bash 正确解析
+const sshSpace = remote.buildSshCommand("kunshan-quant", "/data/my project", script);
+check("shQuote: workdir with spaces is double-quoted", sshSpace[2].includes('cd "/data/my project"'));
+const sshQuote = remote.buildSshCommand("kunshan-quant", "/data/x'y", script);
+check("shQuote: workdir with single quote keeps valid wrapper", sshQuote[2].startsWith("bash -lc '") && sshQuote[2].endsWith("'") && sshQuote[2].includes("x'\\''y"));
 
 // 环境快照命令
 const snap = remote.buildEnvSnapshotCmd();

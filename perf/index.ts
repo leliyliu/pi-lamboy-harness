@@ -17,7 +17,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { buildBenchScript, buildSshCommand, buildEnvSnapshotCmd } from "../packages/core/perf/remote";
+import { buildBenchScript, buildSshCommand, buildEnvSnapshotCmd, shQuote } from "../packages/core/perf/remote";
 import { parseTorchProfile } from "../packages/core/perf/parsers";
 import { quantile, mad, filterOutliers, compareStats } from "../packages/core/perf/stats";
 import type { BenchStats, CompareResult, ProfileReport, RunSpec } from "../packages/core/perf/types";
@@ -154,7 +154,7 @@ export interface ProfileOutcome {
 }
 
 async function runProfile(host: string, tracePath: string, topN: number): Promise<ProfileOutcome> {
-  const res = await execSsh(["ssh", host, `bash -lc 'cat ${tracePath}'`]);
+  const res = await execSsh(["ssh", host, `bash -lc 'cat ${shQuote(tracePath)}'`]);
   const parsed = JSON.parse(res.stdout) as { traceEvents?: unknown[] };
   const report = parseTorchProfile(parsed, topN, tracePath);
   const filePath = path.join(".perf", `profile-${Date.now()}.json`);

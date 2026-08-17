@@ -44,9 +44,17 @@ export function buildBenchScript(spec: BenchScriptSpec, cmd: string): string {
 // quotes escaped via the classic '\'' idiom so the whole body stays inside one
 // single-quoted argument on the remote shell.
 export function buildSshCommand(host: string, workdir: string, script: string): string[] {
-  const body = `cd ${workdir} && ${script}`;
+  const body = `cd ${shQuote(workdir)} && ${script}`;
   const escaped = body.replace(/'/g, `'\\''`);
   return ["ssh", host, `bash -lc '${escaped}'`];
+}
+
+// shQuote — double-quote a value for safe interpolation inside a remote bash
+// command body. Escapes the four double-quote-significant metacharacters
+// (backslash, double quote, dollar, backtick) so paths containing spaces,
+// quotes or shell metacharacters resolve literally on the remote shell.
+export function shQuote(s: string): string {
+  return `"${s.replace(/([\\"$`])/g, "\\$1")}"`;
 }
 
 export function buildEnvSnapshotCmd(): string {

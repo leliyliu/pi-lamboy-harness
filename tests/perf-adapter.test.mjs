@@ -70,7 +70,7 @@ adapter.__setExecForTest(async (argv) => {
   if (body.includes("nvidia-smi --query-gpu")) {
     return { stdout: "NVIDIA H20, 570.0, 1740, 1980\n", stderr: "", code: 0 };
   }
-  if (body.includes("cat /t/trace.json")) {
+  if (body.includes('cat "/t/trace.json"')) {
     return { stdout: JSON.stringify(TORCH_TRACE), stderr: "", code: 0 };
   }
   // bench run: parse the measured-loop run count from the generated script,
