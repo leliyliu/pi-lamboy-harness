@@ -2,6 +2,13 @@
 
 All notable changes to pi-lamboy-harness, in reverse chronological order.
 
+## 0.13.0 (2026-08-14)
+
+Phase 4 per plans/2026-08-14-phase4-latex-design.md:
+
+- Added: latex-toolchain — latex_compile (tectonic backend, structured file:line errors + fix hints), bibtex_check (undefined-citation/unused-entry/duplicate-key), /compile command
+- Requires: tectonic (brew install tectonic); graceful "not found" error otherwise
+
 ## 0.12.0 (2026-08-14)
 
 Phase 3 per plans/2026-08-14-perf-lab-design.md:

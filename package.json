@@ -1,6 +1,6 @@
 {
   "name": "pi-lamboy-harness",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Personal pi harness — Goal lifecycle, Plan gate, Permission guards, Ask, Todo, Pause, TUI, Truncation. Built for long-running autonomous exploration, focused optimization, large-repo maintenance, and academic writing.",
   "type": "module",
   "main": "index.ts",

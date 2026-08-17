@@ -113,6 +113,12 @@ All tools are model-callable, all commands are slash commands with Tab completio
 - **`profile_parse`** — torch profiler trace → hotspot table (op/kernel, self-time %, calls, shapes) the model can reason over directly
 - **`metric_compare`** — Mann-Whitney significance verdict (improve/regress/noise); when noise dominates it advises more runs instead of a false call
 
+### Latex toolchain
+- **Compile & diagnose** — `latex_compile` runs tectonic locally and turns raw engine output into structured `file:line` errors with fix hints (undefined ref → rerun/check key, missing `$` → check math delimiters), so the model can repair a paper instead of reading log soup
+- **Citation consistency** — `bibtex_check` cross-checks `.tex` citations against `.bib` for undefined-citation / unused-entry / duplicate-key issues (metadata validation is left to pi-bib)
+- **`/compile [file]`** — slash-command shortcut; no argument scans the directory for the single main `.tex`
+- **Prerequisite** — requires `tectonic` (`brew install tectonic`); graceful "tectonic not found" error otherwise
+
 ## Commands
 
 | Command | Description |
@@ -135,6 +141,8 @@ All tools are model-callable, all commands are slash commands with Tab completio
 | `bench_run` | Remote GPU benchmark (ssh to host, N-run P50/P95/MAD stats, env snapshot); results persist to `.perf/<run-id>.json` for pi-multiloop verify-command consumption |
 | `profile_parse` | Parse a PyTorch profiler trace into a hotspot table (op/kernel, self-time %, calls, shapes) |
 | `metric_compare` | Mann-Whitney significance test between two `.perf/` results → improve/regress/noise verdict |
+| `latex_compile` | Compile a `.tex` via tectonic → structured `file:line` errors with fix hints + PDF path (requires `brew install tectonic`) |
+| `bibtex_check` | Cross-check `.tex` citations against `.bib` → undefined-citation / unused-entry / duplicate-key report |
 
 ## Architecture
 
@@ -158,12 +166,14 @@ pi-lamboy-harness/
 │   ├── permission/        Permission module (policy chain, approval contract)
 │   ├── pause/             pause gate + full-screen overlay layout (pure, theme-injectable)
 │   ├── perf/              bench stats / torch-profile parse / ssh assembly (pure)
+│   ├── latex/             tectonic log parse + bib consistency check (pure)
 │   └── tui/               box/config/parse/switch/timing/spinner (pure chrome parts)
 ├── pause/                 adapter: /pause overlay component
 ├── tui/                   adapter: LamboyEditor + event wiring
 ├── ask/                   adapter: question dialog + ask_user_question tool
 ├── todo/                  adapter: todo_list tool + inline panel widget
 ├── perf/                  adapter: bench_run / profile_parse / metric_compare tools
+├── latex/                 adapter: latex_compile / bibtex_check tools + /compile command
 └── tests/                 node-level unit tests (below)
 ```
 
@@ -197,6 +207,9 @@ node tests/truncation.test.mjs                    # tool-result spill + window-a
 node tests/tui-adapter.test.mjs                   # TUI adapter working-state render path — 4
 node tests/tui-box.test.mjs                       # TUI box/config/probe/switch — 63
 node tests/tui.test.mjs                           # TUI collapse/keys/completions/spinner — 36
+node tests/latex-parse.test.mjs                    # tectonic log parser — 15
+node tests/latex-bib.test.mjs                      # bib consistency + fixtures — 4
+node tests/latex-adapter.test.mjs                  # latex tools + /compile (mock tectonic) — 11
 ```
 
 The suites run on Node 22/24/26 (22.6–22.17 via

@@ -19,6 +19,7 @@
 | 2026-08-14 | 终审 B1 裁定：安全守卫（destructive/sensitive/git-control）重排至 auto-approve 之前，auto 模式危险操作从静默批准改为必问（无人值守降级 deny）；lock 版本同步 | ✅ 已执行 |
 | 2026-08-14 | Phase 3 perf-lab 落地（stats/parsers/remote core + 3 工具 adapter）；真实 GPU 验收待环境 | ✅ 已执行 |
 | 2026-08-14 | Phase 3 终审修复：.perf/ 入 .gitignore；workdir/tracePath shQuote 引号化转义；6 项延后 Phase 3+（fallback 收集对齐/runId 填充/parser 接线/p=NaN 保守值/二次过滤标注/clock-lock 快照） | ✅ 已执行 |
+| 2026-08-14 | Phase 4 latex-toolchain 落地（parse-log/bib-check core + latex_compile/bibtex_check//compile adapter，tectonic 0.17.0 实编验证）；学术包试用待任务 5 | ✅ 已执行 |
 
 ---
 

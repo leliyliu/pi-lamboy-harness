@@ -102,6 +102,12 @@ pi                                                      # 重启 pi，然后试�
 - **`profile_parse`** — torch profiler trace → 热点表（op/kernel、耗时占比、调用次数、形状），模型可直接推理
 - **`metric_compare`** — Mann-Whitney 显著性判定（improve/regress/noise）；噪声主导时建议增加轮次而非误判
 
+### Latex 工具链模块
+- **编译与诊断** — `latex_compile` 本地运行 tectonic，把原始引擎输出转成结构化 `file:line` 错误 + 修复提示（undefined ref → 重跑/查 key，missing `$` → 检查数学环境定界符），模型可直接修稿而非读日志
+- **引用一致性** — `bibtex_check` 交叉比对 `.tex` 引用与 `.bib`：未定义引用 / 未用条目 / 重复 key（元数据校验留给 pi-bib）
+- **`/compile [file]`** — slash 快捷命令；无参数时扫描目录内唯一 main `.tex`
+- **前置依赖** — 需要 `tectonic`（`brew install tectonic`）；缺失时返回友好的 "tectonic not found" 错误
+
 ## 命令
 
 | 命令 | 说明 |
@@ -124,6 +130,8 @@ pi                                                      # 重启 pi，然后试�
 | `bench_run` | 远程 GPU 基准（ssh 到主机，N 轮 P50/P95/MAD 统计 + 环境快照）；结果落盘 `.perf/<run-id>.json` 供 pi-multiloop 的 verify 命令消费 |
 | `profile_parse` | 解析 PyTorch profiler trace → 热点表（op/kernel、耗时占比、调用次数、形状） |
 | `metric_compare` | 两次 `.perf/` 结果的 Mann-Whitney 显著性检验 → improve/regress/noise 判定 |
+| `latex_compile` | 经 tectonic 编译 `.tex` → 结构化 `file:line` 错误 + 修复提示 + PDF 路径（需 `brew install tectonic`） |
+| `bibtex_check` | 交叉比对 `.tex` 引用与 `.bib` → 未定义引用 / 未用条目 / 重复 key 报告 |
 
 ## 架构
 
@@ -147,12 +155,14 @@ pi-lamboy-harness/
 │   ├── permission/        Permission 模块（策略链 + 审批契约）
 │   ├── pause/             暂停门禁 + 全屏遮罩布局（纯函数，主题可注入）
 │   ├── perf/              bench 统计 / torch-profile 解析 / ssh 组装（纯函数）
+│   ├── latex/             tectonic 日志解析 + bib 一致性检查（纯函数）
 │   └── tui/               box/config/parse/switch/timing/spinner（纯 chrome 件）
 ├── pause/                 适配层：/pause 遮罩组件
 ├── tui/                   适配层：LamboyEditor + 事件接线
 ├── ask/                   适配层：提问对话框 + ask_user_question 工具
 ├── todo/                  适配层：todo_list 工具 + 内联面板
 ├── perf/                  适配层：bench_run / profile_parse / metric_compare 工具
+├── latex/                 适配层：latex_compile / bibtex_check 工具 + /compile 命令
 └── tests/                 node 级单元测试（见下）
 ```
 
@@ -186,6 +196,9 @@ node tests/truncation.test.mjs                    # 结果落盘截断 + 窗口�
 node tests/tui-adapter.test.mjs                   # TUI 适配器 working-state 渲染路径 4 项
 node tests/tui-box.test.mjs                       # TUI 闭合框/配置/探针/切换 63 项
 node tests/tui.test.mjs                           # TUI 折叠/键位/补全/spinner 36 项
+node tests/latex-parse.test.mjs                    # tectonic 日志解析 15 项
+node tests/latex-bib.test.mjs                      # bib 一致性 + 夹具 4 项
+node tests/latex-adapter.test.mjs                  # latex 工具 + /compile（mock tectonic）11 项
 ```
 
 测试支持 Node 22/24/26（22.6–22.17 走 `--experimental-strip-types`，更早的用 `tests/ts-esm-loader.mjs` TypeScript 转译；22.18+ 原生擦除类型）。
