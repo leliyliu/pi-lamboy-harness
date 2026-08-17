@@ -19,17 +19,23 @@ export function buildBenchScript(spec: BenchScriptSpec, cmd: string): string {
   const envExports = Object.entries(spec.env ?? {})
     .map(([k, v]) => `export ${k}=${v}`)
     .join("\n");
+  // Escape single quotes inside cmd so the CMD='...' assignment survives
+  // commands that themselves contain ' (e.g. python -c "..." or --out 'x.json').
+  const escapedCmd = cmd.replace(/'/g, `'\\''`);
+  // Capture output once per run, then extract the PERF_VAL number from that
+  // same output (never re-execute the command): the fallback path re-reads the
+  // captured output instead of running the benchmark a second time.
   return [
     "set -e",
     envExports,
-    `CMD='${cmd}'`,
+    `CMD='${escapedCmd}'`,
     "# warmup (silent)",
     `for i in $(seq 1 ${spec.warmup}); do`,
     '  eval "$CMD" >/dev/null 2>&1',
     "done",
     "# measured runs",
     `for i in $(seq 1 ${spec.runs}); do`,
-    `  eval "$CMD" | grep -oP 'PERF_VAL \\K[\\d.]+' || eval "$CMD" | tail -1`,
+    `  out=$(eval "$CMD" 2>/dev/null); v=$(echo "$out" | grep -oP 'PERF_VAL \\K[\\d.]+' || true); [ -n "$v" ] && echo "PERF_VAL $v" || echo "$out" | tail -1`,
     "done",
   ].filter(Boolean).join("\n");
 }

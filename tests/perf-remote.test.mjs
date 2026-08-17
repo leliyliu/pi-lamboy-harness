@@ -71,5 +71,14 @@ check("snapshot: nvidia-smi query", snap.includes("nvidia-smi --query-gpu=name,d
 check("snapshot: clock max field present", snap.includes("clocks.max.sm") && snap.includes("--format=csv"));
 check("snapshot: command is non-trivial", snap.length > 20);
 
+// 搭车项 1：cmd 内含单引号时 CMD 赋值不被截断
+const qScript = remote.buildBenchScript({ runs: 1, warmup: 0 }, "python b.py --out 'result.json'");
+check("rider: single quotes in cmd escaped (CMD assignment intact)", qScript.includes("'\\''") && qScript.includes("result.json"));
+
+// 搭车项 2：measured 轮只执行一次命令（无 tail -1 重跑回退）
+const noWarm = remote.buildBenchScript({ runs: 1, warmup: 0 }, "python b.py");
+const measuredLine = noWarm.split("\n").find((l) => l.includes("out=$("));
+check("rider: exactly one eval per measured run (no re-execution)", measuredLine !== undefined && (measuredLine.match(/eval "\$CMD"/g) || []).length === 1);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
