@@ -63,6 +63,16 @@ check("err: severity error", parse.parseTectonicLog(TECTONIC_ERR).errors[0].seve
 check("err: missing-$ gets math hint", parse.parseTectonicLog(TECTONIC_ERR).errors[0].hint?.includes("math") === true);
 check("err: engine chatter filtered (1 real error, not 4)", parse.parseTectonicLog(TECTONIC_ERR).errors.length === 1);
 
+// Pure engine failure (chatter lines only, no file:line) must report ok=false.
+const ENGINE_ONLY = `error: something bad happened inside XeTeX; its output follows:
+error: the XeTeX engine had an unrecoverable error
+caused by: halted on potentially-recoverable error as specified
+`;
+const eng = parse.parseTectonicLog(ENGINE_ONLY);
+check("engine-only failure: ok false", eng.ok === false);
+check("engine-only failure: zero structured errors", eng.errors.length === 0);
+check("engine-only failure: rawTail keeps chatter", eng.rawTail.includes("unrecoverable error"));
+
 // Warning: same single-line format. tectonic console does not surface
 // undefined-reference warnings itself (it silently reruns), but biber and
 // future callers may emit "warning: file:line: message" — parse it best-effort.

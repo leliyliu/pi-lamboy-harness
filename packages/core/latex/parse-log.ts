@@ -50,17 +50,20 @@ export function parseTectonicLog(stdout: string): {
   let sawEngineFailure = false;
 
   for (const line of lines) {
+    // Engine chatter (no file:line) must be detected BEFORE the regex gate:
+    // otherwise a pure engine failure yields zero structured errors and `ok`
+    // would incorrectly report true.
+    if (NOISE_MARKERS.some((re) => re.test(line))) {
+      sawEngineFailure = true;
+      continue;
+    }
+
     const m = ERROR_LINE_RE.exec(line);
     if (!m) continue;
     const severity = m[1] as "error" | "warning";
     const file = basename(m[2]);
     const lineNo = Number(m[3]);
     const message = m[4];
-
-    if (NOISE_MARKERS.some((re) => re.test(message))) {
-      sawEngineFailure = true;
-      continue;
-    }
 
     errors.push({
       file,
