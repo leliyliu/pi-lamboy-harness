@@ -1,15 +1,25 @@
 # pi-lamboy-harness
 
-**个人专属 Pi 编排底座** — Goal（目标生命周期/预算/队列）· Plan（计划门控）· Permission（危险操作守卫）· Ask（结构化提问）· Todo（阶段任务）· Pause（冻结检查）· TUI · Truncation（大输出溢出）。
+**个人专属 Pi 编排底座** — Goal（目标生命周期/预算/队列）· Plan（计划门控）· Permission（危险操作守卫）· Ask（结构化提问）· Todo（阶段任务）· Pause（冻结检查）· TUI · Truncation（大输出溢出）· Perf（基准/剖析）· Latex（编译/引用）。
 
 Fork 自 [MuseLinn/pi-muselinn-harness](https://github.com/MuseLinn/pi-muselinn-harness) 0.9.22（感谢原作者）。
-个人改造路线：`plans/personal-harness-roadmap.md`。
+个人改造路线：`plans/personal-harness-roadmap.md`；生态审计与最小集决策：`plans/2026-09-06-*.md`。
 子代理/定时任务/搜索/MCP 由白名单第三方包提供（pi-subagents、pi-web-access、pi-mcp-adapter 等），本包只维护差异化核心。
+
+**v0.14.0 起每个模块都是独立的扩展入口**（`extensions/10-pause.ts` … `95-latex.ts`）——可以用 settings.json 的 object-form 过滤按需启用任意子集，与第三方包使用同一套官方拆分机制；`presets/` 目录把启用面版本化，支持最小集/全量一键切换。
 
 ## 快速开始
 
 ```bash
-pi install git:github.com/leliyliu/pi-lamboy-harness   # 个人 fork；或: pi install /path/to/pi-lamboy-harness
+# 全量安装（10 模块全部加载）
+pi install git:github.com/leliyliu/pi-lamboy-harness   # 或: pi install /path/to/pi-lamboy-harness
+
+# 或最小集安装（过滤到 8 模块：perf/latex 不加载）
+# 手动在 settings.json 写入 object-form 条目，或直接用预设切换（见下）
+
+# 个人附加能力（京东云生图 + JoySpace 导入，可选装）
+pi install /path/to/pi-lamboy-harness/personal
+
 pi                                                      # 重启 pi，然后试试：
 ```
 
@@ -26,6 +36,13 @@ pi                                                      # 重启 pi，然后试�
 所有工具模型可直接调用，所有命令均为支持 Tab 补全的 slash 命令。
 
 ## 功能
+
+> **模块化入口**：每个模块都是独立的扩展入口——在 settings.json 中用 object-form 过滤即可裁剪到任意子集，例如只要三件套：
+> ```json
+> { "source": "/path/to/pi-lamboy-harness",
+>   "extensions": ["extensions/10-pause.ts", "extensions/20-plan.ts", "extensions/80-truncation.ts"] }
+> ```
+> 入口以字典序加载，数字前缀钉死 tool_call 门控链（pause → plan → permission）；被过滤的模块不注册任何工具/命令/事件，零上下文成本。各功能的入口文件列于下方命令/工具表。
 
 ### Pause（冻结、检视）
 
@@ -110,28 +127,32 @@ pi                                                      # 重启 pi，然后试�
 
 ## 命令
 
-| 命令 | 说明 |
-|------|------|
-| `/pause` | 冻结代理到下一个安全边界（esc/enter/space/ctrl+c 恢复） |
-| `/goal <objective>` | 设置目标 |
-| `/todo` | 任务计划（阶段模型）；子命令：`start` `done` `drop` `export` `import` `copy` `edit` `toggle` |
-| `/todo toggle` | 展开/折叠 todo 面板（替代原 `alt+t`） |
+| 命令 | 说明 | 入口 |
+|------|------|------|
+| `/pause` | 冻结代理到下一个安全边界（esc/enter/space/ctrl+c 恢复） | `10-pause.ts` |
+| `/goal <objective>` | 设置目标 | `40-goal.ts` |
+| `/plan` | 进入/管理计划模式 | `20-plan.ts` |
+| `/mode` | 权限模式（auto/yolo/manual） | `30-permission.ts` |
+| `/todo` | 任务计划（阶段模型）；子命令：`start` `done` `drop` `export` `import` `copy` `edit` `toggle` | `60-todo.ts` |
+| `/todo toggle` | 展开/折叠 todo 面板（替代原 `alt+t`） | `60-todo.ts` |
+| `/tui` | 编辑器样式/shimmer/timing 热切换 | `70-tui.ts` |
+| `/compile [file]` | LaTeX 编译快捷命令（唯一 main .tex 自动识别） | `95-latex.ts` |
 
 > `/goal` `/plan` `/mode` `/tui` 均支持 Tab 子命令/参数补全。
 
 ## 工具
 
-| 工具 | 说明 |
-|------|------|
-| `create_goal` / `get_goal` / `update_goal` / `set_goal_budget` | 目标管理 |
-| `enter_plan_mode` / `exit_plan_mode` | Plan Mode |
-| `ask_user_question` | 标签页结构化提问（多选、Other 自由文本） |
-| `todo_list` | 模型驱动的任务计划（内联面板） |
-| `bench_run` | 远程 GPU 基准（ssh 到主机，N 轮 P50/P95/MAD 统计 + 环境快照）；结果落盘 `.perf/<run-id>.json` 供 pi-multiloop 的 verify 命令消费 |
-| `profile_parse` | 解析 PyTorch profiler trace → 热点表（op/kernel、耗时占比、调用次数、形状） |
-| `metric_compare` | 两次 `.perf/` 结果的 Mann-Whitney 显著性检验 → improve/regress/noise 判定 |
-| `latex_compile` | 经 tectonic 编译 `.tex` → 结构化 `file:line` 错误 + 修复提示 + PDF 路径（需 `brew install tectonic`） |
-| `bibtex_check` | 交叉比对 `.tex` 引用与 `.bib` → 未定义引用 / 未用条目 / 重复 key 报告 |
+| 工具 | 说明 | 入口 |
+|------|------|------|
+| `create_goal` / `get_goal` / `update_goal` / `set_goal_budget` | 目标管理 | `40-goal.ts` |
+| `enter_plan_mode` / `exit_plan_mode` | Plan Mode | `20-plan.ts` |
+| `ask_user_question` | 标签页结构化提问（多选、Other 自由文本） | `50-ask.ts` |
+| `todo_list` | 模型驱动的任务计划（内联面板） | `60-todo.ts` |
+| `bench_run` | 远程 GPU 基准（ssh 到主机，N 轮 P50/P95/MAD 统计 + 环境快照）；结果落盘 `.perf/<run-id>.json` 供 pi-multiloop 的 verify 命令消费 | `90-perf.ts` |
+| `profile_parse` | 解析 PyTorch profiler trace → 热点表（op/kernel、耗时占比、调用次数、形状） | `90-perf.ts` |
+| `metric_compare` | 两次 `.perf/` 结果的 Mann-Whitney 显著性检验 → improve/regress/noise 判定 | `90-perf.ts` |
+| `latex_compile` | 经 tectonic 编译 `.tex` → 结构化 `file:line` 错误 + 修复提示 + PDF 路径（需 `brew install tectonic`） | `95-latex.ts` |
+| `bibtex_check` | 交叉比对 `.tex` 引用与 `.bib` → 未定义引用 / 未用条目 / 重复 key 报告 | `95-latex.ts` |
 
 ## 架构
 
@@ -140,7 +161,21 @@ core/adapter 分层：`packages/core/` 是**零 pi import** 的纯逻辑；
 
 ```
 pi-lamboy-harness/
-├── index.ts               入口（permission/plan 接线、截断、模块注册）
+├── extensions/            每模块一个扩展入口（字典序加载；数字前缀钉死
+│   │                      tool_call 门控顺序：pause → plan → permission；
+│   │                      可用 settings.json object-form 过滤任意子集）
+│   ├── 10-pause.ts        /pause + 暂停门禁接线
+│   ├── 20-plan.ts         Plan 模式工具/命令/持久化/门控
+│   ├── 30-permission.ts   /mode + 策略链 + 审批对话框
+│   ├── 40-goal.ts         goal 工具/命令/持久化/预算/徽标
+│   ├── 50-ask.ts          ask_user_question 工具
+│   ├── 60-todo.ts         todo_list + /todo + 内联面板
+│   ├── 70-tui.ts          /tui + 编辑器 chrome + plan 徽标
+│   ├── 80-truncation.ts   工具结果落盘（窗口感知）
+│   ├── 90-perf.ts         bench_run / profile_parse / metric_compare
+│   └── 95-latex.ts        latex_compile / bibtex_check + /compile
+├── personal/              可选个人 pi 包（image2 + joyspace）— 单独安装
+├── presets/               启用面预设 + switch.mjs（minimal/full 切换）
 ├── packages/core/         @lamboy/core — 纯逻辑，零 host import
 │   ├── ports.ts           host 契约（PersistencePort、ScopeDirs）
 │   ├── text-utils.ts      visibleWidth 等
@@ -164,6 +199,44 @@ pi-lamboy-harness/
 ├── perf/                  适配层：bench_run / profile_parse / metric_compare 工具
 ├── latex/                 适配层：latex_compile / bibtex_check 工具 + /compile 命令
 └── tests/                 node 级单元测试（见下）
+```
+
+## 启用面预设（presets/）
+
+"装了什么"由 `~/.pi/agent/settings.json` 的 `packages` 数组唯一决定；`presets/` 把这份配置版本化进仓库，**物理安装永不删除**，切换只改变启用面：
+
+| 文件 | 作用 |
+|------|------|
+| `minimal.v0.1.json` | 最小单元：harness 8/10 模块（perf/latex 过滤掉）+ personal + 5 个整包（subagents/web-access/research/mcp-adapter/focus-bell）+ pie 过滤为 loop/files/powerline-footer + grill-with-docs skill |
+| `full.snapshot.2026-09-06.json` | 全量基线：原 13 包 + personal + grill |
+| `switch.mjs` | 切换脚本：时间戳备份 → 原子替换 packages 数组 → 散落副本移入 `disabled/` → 前后 diff 报告 |
+| `catalog.md` | 按需加回菜单 + 冲突规则 |
+
+```bash
+node presets/switch.mjs list                  # 查看预设与当前状态
+node presets/switch.mjs diff minimal.v0.1     # 预览变更（不动文件）
+node presets/switch.mjs minimal.v0.1          # 切换到最小集
+node presets/switch.mjs full                  # 恢复全量
+```
+
+**已知硬规则**（详见 `presets/catalog.md`）：
+
+1. **工具名冲突 = 启动失败**（不是降级）。harness `get_goal`/`update_goal` 与 pi-multiloop quick-goal 同名，两者不可同时启用（已实测）。复现：两者共存时 pi 直接报 `Tool "get_goal" conflicts` 并拒绝启动。
+2. **object-form 过滤只认 manifest 入口路径**：上游包改名入口会使过滤条目静默失效（表现为该扩展消失）；每次 `pi update` 后建议对比工具清单。
+
+## 个人附加包（personal/，可选装）
+
+与主包无代码依赖的独立 pi package，单独安装：
+
+- **`generate_image` 工具**（京东云 gpt-image2，OpenAI Images 兼容）：画图请求重接生图 API，本地落盘并插入对话。配置：环境变量 `JD_IMAGE_*` 或 `~/.pi/agent/image2.json`
+- **`joyspace-md-import` skill**：经 Playwright 驱动 Slate 编辑器把 Markdown（含图片/表格）写入京东 JoySpace 在线文档
+
+```bash
+# 安装前先移除全局散落副本（防双注册冲突，已实测会致命报错）
+mv ~/.pi/agent/extensions/image2.ts ~/.pi/agent/disabled/extensions/ 2>/dev/null
+mv ~/.pi/agent/skills/joyspace-md-import ~/.pi/agent/disabled/skills/ 2>/dev/null
+pi install /path/to/pi-lamboy-harness/personal
+cd /path/to/pi-lamboy-harness/personal/skills/joyspace-md-import/scripts && npm install   # 首次需装脚本依赖
 ```
 
 ## 测试
@@ -205,9 +278,11 @@ node tests/latex-adapter.test.mjs                  # latex 工具 + /compile（m
 
 ## Roadmap
 
+- ~~**最小集 v0.1**~~ ✅ 已完成（2026-09-06）：多入口改造 + presets 机制 + personal 包收录（决策链：`plans/2026-09-06-packages-ecosystem-audit.md` → `2026-09-06-restructure-briefing.md` → `2026-09-06-minimal-preset-plan.md` → `plans/minimal.v0.1.md`）
 - **i18n** — harness 界面文案与通知双语化（文档已拆分中英）
 - **公式渲染转正** — 待压缩路径的上下文安全性确认后，合入 `feature/math-renderer`
 - **clustered diff 预览** — edit/write 审批消息中的 ±3 行聚簇 diff（P1 批次延迟项）
+- **explore-sync** — 实验历史蒸馏入 pi-research 知识库（roadmap §6.3 遗留）
 
 ## 依赖
 

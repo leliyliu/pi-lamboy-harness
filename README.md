@@ -1,15 +1,25 @@
 # pi-lamboy-harness
 
-**个人专属 Pi 编排底座** — Goal（目标生命周期/预算/队列）· Plan（计划门控）· Permission（危险操作守卫）· Ask（结构化提问）· Todo（阶段任务）· Pause（冻结检查）· TUI · Truncation（大输出溢出）。
+**个人专属 Pi 编排底座** — Goal（目标生命周期/预算/队列）· Plan（计划门控）· Permission（危险操作守卫）· Ask（结构化提问）· Todo（阶段任务）· Pause（冻结检查）· TUI · Truncation（大输出溢出）· Perf（基准/剖析）· Latex（编译/引用）。
 
 Fork 自 [MuseLinn/pi-muselinn-harness](https://github.com/MuseLinn/pi-muselinn-harness) 0.9.22（感谢原作者）。
-个人改造路线：`plans/personal-harness-roadmap.md`。
+个人改造路线：`plans/personal-harness-roadmap.md`；生态审计与最小集决策：`plans/2026-09-06-*.md`。
 子代理/定时任务/搜索/MCP 由白名单第三方包提供（pi-subagents、pi-web-access、pi-mcp-adapter 等），本包只维护差异化核心。
+
+**v0.14.0 起每个模块都是独立的扩展入口**（`extensions/10-pause.ts` … `95-latex.ts`）——可用 settings.json 的 object-form 过滤按需启用任意子集，与第三方包同一套官方拆分机制；`presets/` 目录把启用面版本化，支持最小集/全量一键切换。
 
 ## Quick start
 
 ```bash
-pi install git:github.com/leliyliu/pi-lamboy-harness   # personal fork; or: pi install /path/to/pi-lamboy-harness
+# Full install (all 10 module entries load)
+pi install git:github.com/leliyliu/pi-lamboy-harness   # or: pi install /path/to/pi-lamboy-harness
+
+# Or minimal install (filtered to 8 entries; perf/latex off) —
+# write the object-form entry in settings.json, or just use a preset (see Presets below)
+
+# Personal extras (JD Cloud image generation + JoySpace import, optional)
+pi install /path/to/pi-lamboy-harness/personal
+
 pi                                                      # restart, then:
 ```
 
@@ -26,6 +36,13 @@ Try it out:
 All tools are model-callable, all commands are slash commands with Tab completion.
 
 ## Features
+
+> **Modular entries**: every module is an independent extension entry — trim to any subset via object-form filtering in settings.json, e.g. just the trio:
+> ```json
+> { "source": "/path/to/pi-lamboy-harness",
+>   "extensions": ["extensions/10-pause.ts", "extensions/20-plan.ts", "extensions/80-truncation.ts"] }
+> ```
+> Entries load in lexical order; numeric prefixes pin the tool_call gate chain (pause → plan → permission). Filtered-out modules register no tools/commands/events — zero context cost. The entry for each feature is listed in the Commands/Tools tables below.
 
 ### Pause (freeze, inspect)
 
@@ -121,28 +138,32 @@ All tools are model-callable, all commands are slash commands with Tab completio
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `/pause` | Freeze the agent at the next safe boundary (esc/enter/space/ctrl+c resumes) |
-| `/goal <objective>` | Set a goal |
-| `/todo` | Task plan with phase model; shortcuts: `start` `done` `drop` `export` `import` `copy` `edit` `toggle` |
-| `/todo toggle` | Expand/collapse the todo panel (replaces former `alt+t`) |
+| Command | Description | Entry |
+|---------|-------------|-------|
+| `/pause` | Freeze the agent at the next safe boundary (esc/enter/space/ctrl+c resumes) | `10-pause.ts` |
+| `/goal <objective>` | Set a goal | `40-goal.ts` |
+| `/plan` | Enter/manage plan mode | `20-plan.ts` |
+| `/mode` | Permission mode (auto/yolo/manual) | `30-permission.ts` |
+| `/todo` | Task plan with phase model; shortcuts: `start` `done` `drop` `export` `import` `copy` `edit` `toggle` | `60-todo.ts` |
+| `/todo toggle` | Expand/collapse the todo panel (replaces former `alt+t`) | `60-todo.ts` |
+| `/tui` | Hot-switch editor style/shimmer/timing | `70-tui.ts` |
+| `/compile [file]` | LaTeX compile shortcut (auto-detects the single main `.tex`) | `95-latex.ts` |
 
 > `/goal` `/plan` `/mode` `/tui` all support Tab completion.
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `create_goal` / `get_goal` / `update_goal` / `set_goal_budget` | Goal management |
-| `enter_plan_mode` / `exit_plan_mode` | Plan mode |
-| `ask_user_question` | Tabbed structured questions (multi-select, Other free text) |
-| `todo_list` | Model-driven task plan with inline panel |
-| `bench_run` | Remote GPU benchmark (ssh to host, N-run P50/P95/MAD stats, env snapshot); results persist to `.perf/<run-id>.json` for pi-multiloop verify-command consumption |
-| `profile_parse` | Parse a PyTorch profiler trace into a hotspot table (op/kernel, self-time %, calls, shapes) |
-| `metric_compare` | Mann-Whitney significance test between two `.perf/` results → improve/regress/noise verdict |
-| `latex_compile` | Compile a `.tex` via tectonic → structured `file:line` errors with fix hints + PDF path (requires `brew install tectonic`) |
-| `bibtex_check` | Cross-check `.tex` citations against `.bib` → undefined-citation / unused-entry / duplicate-key report |
+| Tool | Description | Entry |
+|------|-------------|-------|
+| `create_goal` / `get_goal` / `update_goal` / `set_goal_budget` | Goal management | `40-goal.ts` |
+| `enter_plan_mode` / `exit_plan_mode` | Plan mode | `20-plan.ts` |
+| `ask_user_question` | Tabbed structured questions (multi-select, Other free text) | `50-ask.ts` |
+| `todo_list` | Model-driven task plan with inline panel | `60-todo.ts` |
+| `bench_run` | Remote GPU benchmark (ssh to host, N-run P50/P95/MAD stats, env snapshot); results persist to `.perf/<run-id>.json` for pi-multiloop verify-command consumption | `90-perf.ts` |
+| `profile_parse` | Parse a PyTorch profiler trace into a hotspot table (op/kernel, self-time %, calls, shapes) | `90-perf.ts` |
+| `metric_compare` | Mann-Whitney significance test between two `.perf/` results → improve/regress/noise verdict | `90-perf.ts` |
+| `latex_compile` | Compile a `.tex` via tectonic → structured `file:line` errors with fix hints + PDF path (requires `brew install tectonic`) | `95-latex.ts` |
+| `bibtex_check` | Cross-check `.tex` citations against `.bib` → undefined-citation / unused-entry / duplicate-key report | `95-latex.ts` |
 
 ## Architecture
 
@@ -151,7 +172,22 @@ the repo root holds the pi adapter (entry, pi-tui components, tool registration)
 
 ```
 pi-lamboy-harness/
-├── index.ts               entry (permission/plan wiring, truncation, module registration)
+├── extensions/            per-module extension entries (load in lexical order;
+│   │                      numeric prefixes pin the tool_call gate order:
+│   │                      pause → plan → permission; filter any subset via
+│   │                      object-form `extensions` in settings.json)
+│   ├── 10-pause.ts        /pause + pause gate wiring
+│   ├── 20-plan.ts         Plan Mode tools/commands/persistence/gate
+│   ├── 30-permission.ts   /mode + policy chain + approval dialog
+│   ├── 40-goal.ts         goal tools/commands/persistence/budget/badges
+│   ├── 50-ask.ts          ask_user_question tool
+│   ├── 60-todo.ts         todo_list + /todo + inline panel
+│   ├── 70-tui.ts          /tui + editor chrome + plan badge
+│   ├── 80-truncation.ts   tool-result spill (window-aware)
+│   ├── 90-perf.ts         bench_run / profile_parse / metric_compare
+│   └── 95-latex.ts        latex_compile / bibtex_check + /compile
+├── personal/              optional personal pi package (image2 + joyspace) — install separately
+├── presets/               versioned package-set presets + switch.mjs (minimal/full)
 ├── packages/core/         @lamboy/core — pure logic, no host imports
 │   ├── ports.ts           host contracts (PersistencePort, ScopeDirs)
 │   ├── text-utils.ts      visibleWidth & friends
@@ -175,6 +211,44 @@ pi-lamboy-harness/
 ├── perf/                  adapter: bench_run / profile_parse / metric_compare tools
 ├── latex/                 adapter: latex_compile / bibtex_check tools + /compile command
 └── tests/                 node-level unit tests (below)
+```
+
+## Presets (active-surface versioning)
+
+What's installed is decided solely by the `packages` array in `~/.pi/agent/settings.json`; `presets/` version-controls that config inside the repo. Physical installs are **never deleted** — switching only changes the active surface:
+
+| File | Purpose |
+|------|---------|
+| `minimal.v0.1.json` | Minimal unit: harness 8/10 entries (perf/latex filtered out) + personal + 5 full packages (subagents/web-access/research/mcp-adapter/focus-bell) + pie filtered to loop/files/powerline-footer + grill-with-docs skill |
+| `full.snapshot.2026-09-06.json` | Full baseline: the original 13 packages + personal + grill |
+| `switch.mjs` | Switch script: timestamped backup → atomic packages-array replace → sideline loose copies into `disabled/` → before/after diff |
+| `catalog.md` | Add-back menu + conflict rules |
+
+```bash
+node presets/switch.mjs list                  # show presets + current state
+node presets/switch.mjs diff minimal.v0.1     # preview changes (no writes)
+node presets/switch.mjs minimal.v0.1          # switch to the minimal set
+node presets/switch.mjs full                  # restore the full set
+```
+
+**Known hard rules** (see `presets/catalog.md`):
+
+1. **Tool-name conflicts are fatal load errors** (not graceful degradation). harness `get_goal`/`update_goal` collide with pi-multiloop's quick-goal tools — never enable both (verified: pi aborts startup with `Tool "get_goal" conflicts`).
+2. **Object-form filtering matches manifest entry paths exactly**: an upstream package renaming its entry files silently breaks the filter (the extension just disappears). Diff the tool surface after every `pi update`.
+
+## Personal extras (personal/, optional)
+
+A standalone pi package with zero code dependencies on the main harness, installed separately:
+
+- **`generate_image` tool** (JD Cloud gpt-image2, OpenAI Images-compatible): image-generation requests hit the API, save locally, and insert into the conversation. Config: `JD_IMAGE_*` env vars or `~/.pi/agent/image2.json`
+- **`joyspace-md-import` skill**: writes Markdown (with images/tables) into JD JoySpace online docs by driving the Slate editor via Playwright
+
+```bash
+# Remove loose global copies first (double registration is a fatal conflict — verified)
+mv ~/.pi/agent/extensions/image2.ts ~/.pi/agent/disabled/extensions/ 2>/dev/null
+mv ~/.pi/agent/skills/joyspace-md-import ~/.pi/agent/disabled/skills/ 2>/dev/null
+pi install /path/to/pi-lamboy-harness/personal
+cd /path/to/pi-lamboy-harness/personal/skills/joyspace-md-import/scripts && npm install   # script deps, first time only
 ```
 
 ## Tests
@@ -218,9 +292,11 @@ strips types natively).
 
 ## Roadmap
 
+- ~~**Minimal set v0.1**~~ ✅ Done (2026-09-06): multi-entry refactor + presets mechanism + personal package (decision chain: `plans/2026-09-06-packages-ecosystem-audit.md` → `2026-09-06-restructure-briefing.md` → `2026-09-06-minimal-preset-plan.md` → `plans/minimal.v0.1.md`)
 - **i18n** — bilingual harness UI text and notifications (docs are already split en/zh-CN)
 - **Math renderer graduation** — merge `feature/math-renderer` once compaction-path context safety is confirmed
 - **Clustered diff preview** — ±3-line clustered diffs in edit/write approval messages (deferred from the P1 batch)
+- **explore-sync** — distill experiment history into the pi-research knowledge store (roadmap §6.3 carry-over)
 
 ## Dependencies
 
