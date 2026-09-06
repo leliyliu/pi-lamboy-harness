@@ -2,6 +2,16 @@
 
 All notable changes to pi-lamboy-harness, in reverse chronological order.
 
+## 0.14.0 (2026-09-06)
+
+Multi-entry refactor + minimal-preset infrastructure:
+
+- Refactor: single `index.ts` entry → `extensions/` directory with 10 per-module entries (`10-pause` … `95-latex`). Numeric prefixes pin the tool_call gate order (pause → plan → permission): pi loads directory entries in lexical order and short-circuits on the first block (verified in pi `core/extensions/runner.js`). Behavior unchanged when all 10 entries load (21 suites green, typecheck clean).
+- Filterable: any module subset can be enabled via object-form `extensions` filtering in settings.json — the same official mechanism used for third-party packages. Verified end-to-end: 8/10 harness entries loaded, perf/latex absent from the tool surface.
+- Added: `presets/` — versioned package-set presets (`minimal.v0.1`, `full.snapshot`) + `switch.mjs` (timestamped backup → atomic packages-array replace → loose-decoration sideline → before/after diff).
+- Added: `personal/` optional pi package (JD Cloud gpt-image2 image generation + JoySpace markdown import), superseding the loose `~/.pi/agent` copies (which now live in `~/.pi/agent/disabled/`).
+- Known: pi-multiloop quick-goal tools (`get_goal`/`update_goal`) conflict with harness Goal — tool-name conflicts are fatal load errors in pi; never enable both simultaneously (documented in `presets/catalog.md`).
+
 ## 0.13.0 (2026-08-14)
 
 Phase 4 per plans/2026-08-14-phase4-latex-design.md:
