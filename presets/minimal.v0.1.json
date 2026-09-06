@@ -1,0 +1,35 @@
+{
+  "$comment": "Minimal unit v0.1 (per plans/minimal.v0.1.md). Harness with 8 of 10 modules (perf + latex filtered out), personal extras, 5 full third-party packages, pi-agent-extensions narrowed to loop/files/powerline-footer, focus-bell, grill-with-docs skill (chosen 2026-09-06, see plans/2026-09-06-grill-comparison.md). NOT included: pi-multiloop (get_goal/update_goal tool-name conflict with harness Goal — fatal load error, verified 2026-09-06), pi-autoresearch, pi-lifeline, pi-bib, pi-critique, ars, superpowers-zh. Apply with: node presets/switch.mjs minimal.v0.1",
+  "name": "minimal.v0.1",
+  "packages": [
+    {
+      "source": "/Users/liulian.leliy/github-projects/pi-lamboy-harness",
+      "extensions": [
+        "extensions/10-pause.ts",
+        "extensions/20-plan.ts",
+        "extensions/30-permission.ts",
+        "extensions/40-goal.ts",
+        "extensions/50-ask.ts",
+        "extensions/60-todo.ts",
+        "extensions/70-tui.ts",
+        "extensions/80-truncation.ts"
+      ]
+    },
+    "/Users/liulian.leliy/github-projects/pi-lamboy-harness/personal",
+    "npm:pi-subagents",
+    "npm:pi-web-access",
+    "npm:@lincoln504/pi-research",
+    "npm:pi-mcp-adapter",
+    {
+      "source": "npm:pi-agent-extensions",
+      "extensions": [
+        "extensions/loop/index.ts",
+        "extensions/files/index.ts",
+        "extensions/powerline-footer/index.ts"
+      ],
+      "themes": []
+    },
+    "npm:pi-focus-bell",
+    "npm:@barlevalon/grill-with-docs-skill"
+  ]
+}

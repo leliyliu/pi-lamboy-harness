@@ -1,0 +1,21 @@
+{
+  "$comment": "Full baseline snapshot (2026-09-06). 13 npm packages from the pre-minimal era + the personal extras package (which supersedes the loose ~/.pi/agent/extensions/image2.ts and ~/.pi/agent/skills/joyspace-md-import copies — those now live in ~/.pi/agent/disabled/). Restore with: node presets/switch.mjs full",
+  "name": "full",
+  "packages": [
+    "npm:pi-web-access",
+    "npm:pi-subagents",
+    "npm:superpowers-zh",
+    "npm:pi-autoresearch",
+    "npm:pi-multiloop",
+    "npm:pi-lifeline",
+    "npm:@lincoln504/pi-research",
+    "npm:pi-mcp-adapter",
+    "npm:pi-bib",
+    "npm:pi-critique",
+    "npm:@portos-wang/academic-research-skills-pi-extension",
+    "npm:pi-agent-extensions",
+    "npm:pi-focus-bell",
+    "npm:@barlevalon/grill-with-docs-skill",
+    "/Users/liulian.leliy/github-projects/pi-lamboy-harness/personal"
+  ]
+}
