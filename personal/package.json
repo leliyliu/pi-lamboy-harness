@@ -1,0 +1,19 @@
+{
+  "name": "pi-lamboy-personal",
+  "version": "0.1.0",
+  "description": "Optional personal extras for the lamboy pi ecosystem: JD Cloud gpt-image2 image generation + JoySpace markdown import. Install separately from the main pi-lamboy-harness package.",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension"
+  ],
+  "license": "MIT",
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  }
+}
