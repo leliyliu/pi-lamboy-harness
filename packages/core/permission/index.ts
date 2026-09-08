@@ -215,22 +215,21 @@ YOLO permission mode is active. Actions are unconditionally allowed, but destruc
 
   /**
    * Inject permission mode reminder into messages (called from context event).
+   *
+   * Cache-friendly (docs/research/client-injection-cache-optimization.md):
+   * the reminder lands as a TAIL user message, never in the system prompt —
+   * system appends invalidate the prefix cache for the whole conversation.
+   * The message is ephemeral (context-event deep copy), so it is not
+   * persisted into the session.
    */
   injectIntoMessages(messages: Array<{ role: string; content?: any }>): void {
     const injection = this.buildInjection();
     if (!injection) return;
-    // Find the last system message and append the injection
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg.role === "system") {
-        if (Array.isArray(msg.content)) {
-          msg.content.push({ type: "text", text: `\n\n---\n${injection}` });
-        } else if (typeof msg.content === "string") {
-          msg.content += `\n\n---\n${injection}`;
-        }
-        return;
-      }
-    }
+    messages.push({
+      role: 'user',
+      content: [{ type: 'text', text: injection }],
+      timestamp: Date.now(),
+    });
   }
 }
 

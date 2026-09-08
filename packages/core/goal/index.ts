@@ -717,24 +717,24 @@ export class GoalManager {
   }
 
   /**
-   * Inject goal into system prompt messages.
-   * Called from context event handler — appends goal to the system message.
+   * Inject goal context into messages.
+   * Called from context event handler.
+   *
+   * Cache-friendly (docs/research/client-injection-cache-optimization.md):
+   * the injection (which carries tokensUsed/turnsUsed counters that change
+   * EVERY turn) lands as a TAIL user message, never in the system prompt —
+   * the CC `<total_tokens>` drift pattern invalidates the prefix cache for
+   * the whole conversation on every turn. The message is ephemeral
+   * (context-event deep copy), so it is not persisted into the session.
    */
   injectIntoMessages(messages: Array<{ role: string; content?: any }>): void {
     const injection = this.buildInjection();
     if (!injection) return;
-    // Find the system message (first with role "system" or "developer")
-    for (const msg of messages) {
-      if (msg.role === "system" || msg.role === "developer") {
-        if (Array.isArray(msg.content)) {
-          // Multi-part content: append a text part
-          msg.content.push({ type: "text", text: `\n\n---\n${injection}` });
-        } else if (typeof msg.content === "string") {
-          msg.content += `\n\n---\n${injection}`;
-        }
-        return;
-      }
-    }
+    messages.push({
+      role: 'user',
+      content: [{ type: 'text', text: injection }],
+      timestamp: Date.now(),
+    });
   }
 
   // ── Completion Statistics ─────────────────────────────────────────────

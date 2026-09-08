@@ -475,6 +475,13 @@ export class PlanManager {
    * Inject plan mode reminder into messages.
    * Uses full injection on the first call or when the last message is
    * from the user; sparse injection on subsequent assistant turns.
+   *
+   * Cache-friendly (docs/research/client-injection-cache-optimization.md):
+   * the injection lands as a TAIL user message, never in the system
+   * prompt — the CC drift pattern (system append) invalidates the prefix
+   * cache for the whole conversation on every full↔sparse variant switch.
+   * The message is ephemeral (context-event deep copy), so it is not
+   * persisted into the session.
    */
   injectIntoMessages(messages: Array<{ role: string; content?: any }>): void {
     if (!planModeState.isActive) return;
@@ -495,16 +502,11 @@ export class PlanManager {
     const injection = this.buildInjection(sparse);
     if (!injection) return;
 
-    for (const msg of messages) {
-      if (msg.role === 'system' || msg.role === 'developer') {
-        if (Array.isArray(msg.content)) {
-          msg.content.push({ type: 'text', text: `\n\n---\n${injection}` });
-        } else if (typeof msg.content === 'string') {
-          msg.content += `\n\n---\n${injection}`;
-        }
-        return;
-      }
-    }
+    messages.push({
+      role: 'user',
+      content: [{ type: 'text', text: injection }],
+      timestamp: Date.now(),
+    });
   }
 
   // ── Persistence ────────────────────────────────────────────────────────
