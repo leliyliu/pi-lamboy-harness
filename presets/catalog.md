@@ -8,6 +8,7 @@
 | 文件 | 作用 |
 |---|---|
 | `minimal.v0.1.json` | 最小单元 v0.1（清单见 `plans/minimal.v0.1.md`；harness 8/10 模块 + personal + 5 整包 + pie 3 扩展 + focus-bell） |
+| `minimal.v0.2.json` | v0.1 + 加回 harness perf-lab（`90-perf.ts`）：方案 A 目标驱动并行优化探索面（goal + subagents 并行 lane + bench_run/profile_parse/metric_compare 裁决）。2026-09-09 本地 + quant02 双端实测：启动 EXIT 0、无工具冲突、perf 工具入面。注意 `source` 是本地绝对路径，quant02 应用前需改为其仓库路径 |
 | `full.snapshot.2026-09-06.json` | 全量基线（原 13 包 + personal 包；personal 取代了散落的 image2.ts / joyspace skill，散落副本已入 `~/.pi/agent/disabled/`） |
 | `switch.mjs` | 切换脚本（备份 → 原子替换 packages → 装饰层联动 → diff 报告） |
 | `catalog.md` | 本文件：按需加回的菜单 |

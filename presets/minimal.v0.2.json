@@ -1,0 +1,36 @@
+{
+  "$comment": "Minimal unit v0.2 (2026-09-09). v0.1 + harness perf-lab re-enabled (90-perf.ts) for Plan A: goal-driven parallel optimization exploration. bench_run/profile_parse/metric_compare join the tool surface so parallel subagent lanes can be judged by Mann-Whitney significance; latex stays filtered. Verified on both local (macOS, pi 0.85.1) and quant02 (Ubuntu, pi 0.85.1, node v22.23.2): startup EXIT 0, no tool conflicts, tool surface carries bench_run/profile_parse/metric_compare + goal tools + subagent. Apply with: node presets/switch.mjs minimal.v0.2",
+  "name": "minimal.v0.2",
+  "packages": [
+    {
+      "source": "/Users/liulian.leliy/github-projects/pi-lamboy-harness",
+      "extensions": [
+        "extensions/10-pause.ts",
+        "extensions/20-plan.ts",
+        "extensions/30-permission.ts",
+        "extensions/40-goal.ts",
+        "extensions/50-ask.ts",
+        "extensions/60-todo.ts",
+        "extensions/70-tui.ts",
+        "extensions/80-truncation.ts",
+        "extensions/90-perf.ts"
+      ]
+    },
+    "/Users/liulian.leliy/github-projects/pi-lamboy-harness/personal",
+    "npm:pi-subagents",
+    "npm:pi-web-access",
+    "npm:@lincoln504/pi-research",
+    "npm:pi-mcp-adapter",
+    {
+      "source": "npm:pi-agent-extensions",
+      "extensions": [
+        "extensions/loop/index.ts",
+        "extensions/files/index.ts",
+        "extensions/powerline-footer/index.ts"
+      ],
+      "themes": []
+    },
+    "npm:pi-focus-bell",
+    "npm:@barlevalon/grill-with-docs-skill"
+  ]
+}
