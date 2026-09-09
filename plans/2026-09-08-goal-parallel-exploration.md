@@ -107,6 +107,19 @@ subagent(workflowScript: runs.lanes([...]))  # 并行 lane：每 lane 一个探�
 2. 若近期有「测量驱动的 keep/revert 循环」刚需（如 kernel 调优），排期做 **B1**（一个下午的改动 + 测试）
 3. 每次动 settings.json 前跑 `node presets/switch.mjs diff <preset>` 核对工具面（catalog.md 已知规则 1/2 的教训）
 
+## 4.2 multiloop 语义保障：守卫 + 指令双层落地（2026-09-09）
+
+**背景**：用户在 quant02 终端手动 `pi install npm:pi-multiloop`（11:27 npm 包落地，11:28 settings.json 写入，mtime 实证）→ pi fatal 启动失败（get_goal/update_goal 双冲突，stderr 实证）。已修复：settings.json 剔除该条目（备份 `settings.json.bak-broken-multiloop-20260909`），`pi -p` 恢复 EXIT 0。
+
+**双层防护**：
+
+| 层 | 实现 | 验证 |
+|---|---|---|
+| 硬守卫（permission） | 新 policy `known-tool-conflict-install-deny`（id 42，安全层，先于 auto/yolo approve）：deny `pi install … pi-multiloop`（bash）与 settings.json 引入该包（write/edit）；deny reason 引导模型改用方案 A | TDD 7 用例（27/27），quant02 同样 7/7；实弹：headless 会话被拦，settings.json md5 前后一致 |
+| 指令层（AGENTS.md） | quant02 + 本地 `~/.pi/agent/AGENTS.md` 追加「优化探索策略（multiloop 语义）」节：multiloop = 方案 A 工具链（非 npm 包），严禁安装 + 被拒后不重试 | 自然语言实测：问「CUDA 算子 multiloop 优化探索」→ 模型直接给出方案 A 完整工作流（goal/bench_run/runs.lanes/worktree/metric_compare/verified=true），不提议安装 |
+
+代码：`packages/core/permission/policies.ts`（policy04cKnownConflictInstallDeny）+ `tests/permission.test.mjs` §7；同 commit 修复 8b74bcb 遗留的 3 处 TS2353（timestamp 字段未声明）。
+
 ## 4.1 方案 A 落地记录（2026-09-09，本地 + quant02 双端安装）
 
 | 端 | 动作 | 验证 |
