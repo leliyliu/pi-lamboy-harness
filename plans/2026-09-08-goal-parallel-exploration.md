@@ -115,7 +115,7 @@ subagent(workflowScript: runs.lanes([...]))  # 并行 lane：每 lane 一个探�
 | quant02（Ubuntu 22.04, H20 GPU 机, pi 0.85.1, node v22.23.2/nvm） | 同样脚本（scp 过去）备份 + 原子加回 | ssh 隧道（127.0.0.1:22213）执行；`pi -p` 启动 EXIT 0；工具面同上（TOTAL=29，唯一差异 `web_search_pi` 是 pi-web-access 版本差异，与本次无关） |
 
 - 预设同步：新增 `presets/minimal.v0.2.json`（harness 9/10 模块，latex 仍过滤）+ `catalog.md` 登记；`switch.mjs diff minimal.v0.2` 对本地当前面零差异
-- 已知分叉：quant02 仓库 HEAD `8b74bcb`（feat(cache): move dynamic injections…）领先本地 `75ebcc8`，两端 `extensions/90-perf.ts` 均存在故安装不受影响；后续需把 quant02 的提交同步回本地仓库
+- **分叉已合并（2026-09-09，merge commit `00eeb02`）**：本地 `cf0b54e`（presets v0.2）与 quant02 `8b74bcb`（feat(cache)：动态注入从 system prompt 迁至尾部 user message，前缀缓存友好，90.2% prefill 节省）零冲突合入；合并后全量测试 22 套件 / 596 断言通过（含新 `tests/cache-stability.test.mjs`）；已推送 origin（GitHub）；quant02 同步到同一提交。文件面不相交（presets/docs vs core 注入代码），后续双端同步可用 `git fetch quant02 && git merge quant02/main`
 - quant02 回滚：`cp ~/.pi/agent/settings.json.bak-<ts> ~/.pi/agent/settings.json` 后重启 pi
 
 ## 5. 证据附录
