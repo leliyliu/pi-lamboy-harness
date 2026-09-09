@@ -426,21 +426,26 @@ export function registerTodoReminders(pi: any): void {
     }
   });
 
-  // context: inject system-reminders for all three layers
+  // context: inject reminders for all three layers
+  //
+  // Cache-friendly injection (docs/research/client-injection-cache-
+  // optimization.md in kvcache-simulator): reminders land as a TAIL user
+  // message instead of being appended to the system prompt. Appending to
+  // system is the Claude-Code drift pattern — every reminder change
+  // truncates the prefix cache for the entire conversation behind it. A
+  // tail message costs only its own tokens; pi's `context` event messages
+  // are a per-request deep copy, so the injection is ephemeral (never
+  // persisted into the session, never shown in the transcript).
   pi.on("context", (event: any) => {
     if (!event.messages) return;
 
-    // Helpers to inject a block into the system message
+    // Helper to inject a reminder as a new trailing user message
     const inject = (text: string) => {
-      const sysMsg = event.messages.find((m: any) => m.role === "system");
-      const block = { type: "text", text };
-      if (sysMsg) {
-        sysMsg.content = Array.isArray(sysMsg.content)
-          ? [...sysMsg.content, block]
-          : [{ type: "text", text: sysMsg.content }, block];
-      } else {
-        event.messages.unshift({ role: "system", content: [block] });
-      }
+      event.messages.push({
+        role: "user",
+        content: [{ type: "text", text }],
+        timestamp: Date.now(),
+      });
     };
 
     // ── Layer 1: Eager prompt ──
