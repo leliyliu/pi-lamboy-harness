@@ -261,6 +261,57 @@ reset();
     goalManager.getGoal()?.status === "complete", ok.content?.[0]?.text);
 }
 
+// ── 10. update_goal 从 usage_limited 自动恢复（429 卡死修复） ─────────────
+// 根因: tools.ts case "active" 只路由 paused/blocked → resume(),
+// usage_limited 走 else 分支返回原 goal, 状态纹丝不动。resume() 本身
+// 只拒 complete, 本可恢复 usage_limited。本组验证路由被补上。
+reset();
+{
+  const tools = new Map();
+  registerGoalTools({ registerTool: (def) => tools.set(def.name, def) }, goalManager);
+  const updateGoal = tools.get("update_goal");
+
+  // 10a. usage_limited → update_goal(active) → 恢复 active
+  goalManager.createGoal("usage_limited recovery probe");
+  goalManager.markUsageLimited("429 RATE_LIMIT from jdcloud");
+  check("usage_limited set", goalManager.getGoal()?.status === "usage_limited",
+    goalManager.getGoal()?.status);
+  await updateGoal.execute("tc-r1", { status: "active" }, null, null, {});
+  check("usage_limited recovers to active via update_goal",
+    goalManager.getGoal()?.status === "active", goalManager.getGoal()?.status);
+
+  // 10b. budget_limited → update_goal(active) → 不恢复（保留用户决策）
+  // 证据: recordTurn 的 tokensUsed 单调累积不重置, 恢复后必再超限,
+  // LLM 自动恢复=白烧 token。budget_limited 须靠 set_goal_budget/ /goal resume。
+  goalManager.clear();
+  goalManager.createGoal("budget_limited no-auto-recovery probe");
+  goalManager.markBudgetLimited("tokenBudget exceeded");
+  check("budget_limited set", goalManager.getGoal()?.status === "budget_limited",
+    goalManager.getGoal()?.status);
+  await updateGoal.execute("tc-r2", { status: "active" }, null, null, {});
+  check("budget_limited does NOT auto-recover (reserved for user decision)",
+    goalManager.getGoal()?.status === "budget_limited", goalManager.getGoal()?.status);
+
+  // 10c. complete → update_goal(active) → 不复活（墓碑保护）
+  goalManager.clear();
+  goalManager.createGoal("complete tombstone probe", "all green");
+  goalManager.complete("user", "done", true);
+  check("complete set", goalManager.getGoal()?.status === "complete",
+    goalManager.getGoal()?.status);
+  await updateGoal.execute("tc-r3", { status: "active" }, null, null, {});
+  check("complete goal is not resurrected by update_goal(active)",
+    goalManager.getGoal()?.status === "complete", goalManager.getGoal()?.status);
+
+  // 10d. active → update_goal(active) → 幂等
+  goalManager.clear();
+  goalManager.createGoal("active idempotent probe");
+  const before = goalManager.getGoal()?.goalId;
+  await updateGoal.execute("tc-r4", { status: "active" }, null, null, {});
+  check("active→active is idempotent (no-op, no resurrection)",
+    goalManager.getGoal()?.status === "active" && goalManager.getGoal()?.goalId === before,
+    goalManager.getGoal()?.status);
+}
+
 reset();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

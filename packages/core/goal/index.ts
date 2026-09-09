@@ -474,12 +474,33 @@ export class GoalManager {
 
   /**
    * Build wrap-up instruction for budget_limited/usage_limited goals.
+   *
+   * usage_limited (provider 429) is a temporary external limit: once the
+   * rate-limit window clears the goal can self-recover via
+   * update_goal(status="active"). Repeated attempts before the window clears
+   * re-trigger detectProviderLimitError (natural cooldown loop).
+   *
+   * budget_limited (user tokenBudget) is reserved for user decision: tokensUsed
+   * is monotonic, so an LLM auto-recover would re-limit immediately and burn
+   * tokens. Wait for set_goal_budget / /goal resume.
    */
   buildWrapUpInjection(): string | undefined {
     const g = goalState.current;
     if (!g) return undefined;
     if (g.status !== "budget_limited" && g.status !== "usage_limited") return undefined;
     const statusLabel = g.status === "budget_limited" ? "Token budget exceeded" : "Provider quota exhausted";
+    if (g.status === "usage_limited") {
+      return [
+        `⚠️ ${statusLabel}. Tool calls are blocked while the rate-limit window is active.`,
+        ``,
+        `Provide a brief wrap-up:`,
+        `- Progress made so far`,
+        `- Results achieved`,
+        `- Blockers encountered`,
+        ``,
+        `Once the provider quota window clears, you may call update_goal(status="active") to resume this goal. Do NOT call create_goal.`,
+      ].join("\n");
+    }
     return [
       `⚠️ ${statusLabel}. You MUST NOT use any tools now.`,
       ``,
@@ -488,7 +509,7 @@ export class GoalManager {
       `- Results achieved`,
       `- Blockers encountered`,
       ``,
-      `Do NOT attempt to continue the goal. Do NOT call create_goal or update_goal.`,
+      `Do NOT attempt to continue the goal. Do NOT call create_goal or update_goal. The token budget is a user-set limit — wait for the user to raise it (set_goal_budget) or resume manually (/goal resume).`,
     ].join("\n");
   }
 

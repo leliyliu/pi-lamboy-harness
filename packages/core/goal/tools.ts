@@ -110,6 +110,7 @@ export function registerGoalTools(pi: any, goalManager: GoalManager): void {
       "update_goal: update the current goal status (complete requires verified=true when a completion_criterion was declared)",
     promptGuidelines: [
       "Use update_goal to mark the goal status as 'complete', 'paused', or 'active'",
+      "status='active' resumes from 'paused'/'blocked'/'usage_limited' — use it to self-recover after a provider 429 rate-limit clears; budget_limited is reserved for user decision (raise via set_goal_budget or /goal resume)",
       "Mark goal as 'complete' only when the objective is achieved and any stated validation has passed — verify the actual state against the objective and every explicit requirement; treat weak or indirect evidence as not complete",
       "If the goal was created with a completion_criterion, status='complete' is REFUSED unless you also pass verified=true in the same call — verified=true is your machine-readable assertion that you checked the criterion against the actual result",
       "Do not mark 'complete' merely because a budget is nearly exhausted or you want to stop",
@@ -122,7 +123,7 @@ export function registerGoalTools(pi: any, goalManager: GoalManager): void {
           type: "string",
           enum: ["active", "paused", "blocked", "complete"],
           description:
-            "New status for the goal. Note: 'complete' requires verified=true in the same call when the goal declared a completion_criterion.",
+            "New status for the goal. 'active' resumes from paused/blocked/usage_limited (e.g. self-recover after a provider 429 clears). Note: 'complete' requires verified=true in the same call when the goal declared a completion_criterion.",
         },
         objective: { type: "string", description: "Updated objective (optional)" },
         reason: { type: "string", description: "Reason for status change (optional)" },
@@ -166,7 +167,12 @@ export function registerGoalTools(pi: any, goalManager: GoalManager): void {
           updated = goalManager.block(params.reason, "model");
           break;
         case "active":
-          if (goal.status === "paused" || goal.status === "blocked") {
+          // Resume from paused/blocked/usage_limited. usage_limited (provider 429)
+          // is a temporary external limit — once the rate-limit window clears the
+          // model can self-recover. budget_limited is excluded: tokensUsed is
+          // monotonic so an auto-recover would re-limit immediately and burn
+          // tokens; it is reserved for user decision (set_goal_budget / /goal resume).
+          if (goal.status === "paused" || goal.status === "blocked" || goal.status === "usage_limited") {
             updated = goalManager.resume("model");
           } else {
             updated = goal;
