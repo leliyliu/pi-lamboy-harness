@@ -4,6 +4,8 @@ All notable changes to pi-lamboy-harness, in reverse chronological order.
 
 ## Unreleased
 
+- Reverted (permission): pi-multiloop install guard (`known-tool-conflict-install-deny`, from b1e967b) removed per user decision — command semantics are enforced by the instruction layer (`~/.pi/agent/AGENTS.md` "multiloop 语义" section) instead of a hard code guard: "开启 multiloop" means run the deployed Plan-A toolchain (goal + parallel subagents + bench_run/metric_compare), never an install action. The tool-name collision fact remains (verified fatal pi 0.85.1 exit 1) and is documented there.
+
 - Added (permission): pi-multiloop install guard — `known-tool-conflict-install-deny` policy (id 42, safety layer before auto/yolo approve) denies `pi install … pi-multiloop` and settings.json edits that introduce the package (fatal `get_goal`/`update_goal` tool-name collision with harness Goal, verified pi 0.85.1 exit 1). 7 new checks in `tests/permission.test.mjs` (auto/yolo deny, non-conflicting install passes, settings.json write/edit vectors, ordinary-file pass-through).
 - Fixed: `injectIntoMessages` signatures now declare optional `timestamp` (3 files from merged 8b74bcb) — typecheck clean again.
 

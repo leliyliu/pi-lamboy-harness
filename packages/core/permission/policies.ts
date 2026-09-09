@@ -113,52 +113,6 @@ export const policy04bDestructiveAsk: Policy = {
   },
 };
 
-// ── 04c: known-tool-conflict-install-deny ────────────────────────────
-// pi-multiloop 的 quick-goal 工具 get_goal/update_goal 与 harness Goal 工具
-// 同名。工具名冲突是 pi 启动致命错误（实测 pi 0.85.1："Tool \"get_goal\" 
-// conflicts"，exit 1，非降级）。守卫拦截两条路径：
-//  1. bash：`pi install` 命令中出现 pi-multiloop（npm:/git:/本地路径均覆盖）
-//  2. write/edit：直改 ~/.pi/agent/settings.json 且新内容引入 pi-multiloop
-// 无条件 deny（非 ask）：与本机 harness Goal 共存时装它必然弄坏启动，没有
-// 合法出口；人类想装可在自己终端直接执行，不经 agent。文档/预设等普通文件
-// 提及 pi-multiloop 不受影响（路径必须命中 settings.json）。
-const MULTILOOP_INSTALL_BASH_RE = /\bpi\s+install\b[^\n]*pi-multiloop/i;
-const SETTINGS_JSON_PATH_RE = /[\\\/]\.pi[\\\/]agent[\\\/]settings\.json$/i;
-const MULTILOOP_PKG_RE = /pi-multiloop/i;
-
-const MULTILOOP_DENY_REASON =
-  'pi-multiloop cannot be installed alongside this harness: its quick-goal tools ' +
-  'get_goal/update_goal collide with the harness Goal tools — a tool-name conflict is a ' +
-  'fatal pi startup error (verified pi 0.85.1, exit 1). If asked to run a "multiloop" ' +
-  'optimization, use the deployed strategy instead: goal + parallel subagents (workflowScript ' +
-  'runs.lanes, optional worktree isolation) + bench_run/metric_compare for measurement.';
-
-export const policy04cKnownConflictInstallDeny: Policy = {
-  id: 42,
-  name: 'known-tool-conflict-install-deny',
-  evaluate(ctx: PolicyContext): PolicyResult | null {
-    if (ctx.toolName === 'bash') {
-      const command = typeof ctx.input.command === 'string' ? ctx.input.command : '';
-      if (command && MULTILOOP_INSTALL_BASH_RE.test(command)) {
-        return { kind: 'deny', reason: MULTILOOP_DENY_REASON };
-      }
-      return null;
-    }
-    if (ctx.toolName === 'edit' || ctx.toolName === 'write') {
-      const filePath = (ctx.input.path as string) || (ctx.input.file_path as string) || '';
-      if (!filePath || !SETTINGS_JSON_PATH_RE.test(path.resolve(ctx.cwd, filePath))) return null;
-      const content =
-        (typeof ctx.input.content === 'string' ? ctx.input.content : '') +
-        (ctx.input.edits ? JSON.stringify(ctx.input.edits) : '');
-      if (MULTILOOP_PKG_RE.test(content)) {
-        return { kind: 'deny', reason: MULTILOOP_DENY_REASON };
-      }
-      return null;
-    }
-    return null;
-  },
-};
-
 // ── 05: auto-mode-approve ───────────────────────────────────────────────
 // auto 模式：批准一切（短路，但在敏感文件/破坏性守卫之后）
 export const policy05AutoApprove: Policy = {
@@ -390,7 +344,6 @@ export const policyChain: Policy[] = [
   // Safety checks first — even auto mode asks on destructive/sensitive ops
   // (unattended no-UI sessions degrade these asks to a block).
   policy04bDestructiveAsk,
-  policy04cKnownConflictInstallDeny,
   policy12SensitiveFile,
   policy13GitControl,
   // AutoApprove fires after safety checks — auto approves ordinary work only.
