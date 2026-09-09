@@ -2,6 +2,13 @@
 
 All notable changes to pi-lamboy-harness, in reverse chronological order.
 
+## Unreleased
+
+- Added (permission): pi-multiloop install guard — `known-tool-conflict-install-deny` policy (id 42, safety layer before auto/yolo approve) denies `pi install … pi-multiloop` and settings.json edits that introduce the package (fatal `get_goal`/`update_goal` tool-name collision with harness Goal, verified pi 0.85.1 exit 1). 7 new checks in `tests/permission.test.mjs` (auto/yolo deny, non-conflicting install passes, settings.json write/edit vectors, ordinary-file pass-through).
+- Fixed: `injectIntoMessages` signatures now declare optional `timestamp` (3 files from merged 8b74bcb) — typecheck clean again.
+
+- Fixed (ask): multi-select questions were silently submitted with no answer when the user hit Enter on the option they wanted (single-select muscle memory) — Enter only confirmed the current toggle set, so start-my-day's `multi_select` questions came back as `skipped by user` and, after the last question, `advance()` wrapped back to the unanswered question instead of the submit page. Enter on an empty selection now picks the option under the cursor first (non-empty sets still confirm as-is; Other/Chat rows unchanged). New dialog-level regression suite `tests/ask-dialog.test.mjs` drives the real `QuestionDialogComponent` with raw key sequences (13 checks; 22 suites green, typecheck clean).
+
 ## 0.14.0 (2026-09-06)
 
 Multi-entry refactor + minimal-preset infrastructure:

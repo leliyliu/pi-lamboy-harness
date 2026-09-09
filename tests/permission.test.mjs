@@ -215,5 +215,59 @@ process.chdir(prevCwd);
 fs.rmSync(projDir, { recursive: true, force: true });
 fs.rmSync(globalDir, { recursive: true, force: true });
 
+// ── 7. pi-multiloop 安装守卫（known-tool-conflict-install-deny）──────────
+// pi-multiloop 的 get_goal/update_goal 与 harness Goal 工具同名 —— 工具名冲突
+// 是 pi 启动致命错误（实测 pi 0.85.1：exit 1, "Tool get_goal conflicts"）。
+// 守卫拦截两条路径：bash 的 pi install 命令、write/edit 直改 ~/.pi/agent/settings.json。
+{
+  const guardHome = fs.mkdtempSync(path.join(os.tmpdir(), "perm-test-guard-"));
+  const settingsPath = path.join(guardHome, ".pi", "agent", "settings.json");
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+
+  // 7a. auto: pi install npm:pi-multiloop → deny（即使模拟用户同意）
+  permissionManager.resetHistory();
+  permissionManager.setMode("auto");
+  const blocked = await evalIn("bash", { command: "pi install npm:pi-multiloop" }, cleanCwd, true);
+  check("multiloop-guard: auto denies 'pi install npm:pi-multiloop'",
+    blocked?.block === true && /fatal|conflict/i.test(blocked?.reason ?? ""), JSON.stringify(blocked));
+
+  // 7b. yolo: 同样 deny（安全层先于 yolo-approve）
+  permissionManager.setMode("yolo");
+  const blockedYolo = await evalIn("bash", { command: "pi install git:github.com/lhl/pi-multiloop" }, cleanCwd, true);
+  check("multiloop-guard: yolo still denies pi-multiloop install",
+    blockedYolo?.block === true, JSON.stringify(blockedYolo));
+
+  // 7c. 合法包安装不受影响
+  permissionManager.setMode("auto");
+  const okInstall = await evalIn("bash", { command: "pi install npm:pi-web-access" }, cleanCwd, true);
+  check("multiloop-guard: non-conflicting pi install passes through",
+    okInstall === undefined, JSON.stringify(okInstall));
+
+  // 7d. write settings.json 加 pi-multiloop → deny
+  const blockedWrite = await evalIn("write",
+    { path: settingsPath, content: '{"packages":["npm:pi-multiloop"]}' }, cleanCwd, true);
+  check("multiloop-guard: write settings.json with pi-multiloop denied",
+    blockedWrite?.block === true, JSON.stringify(blockedWrite));
+
+  // 7e. write settings.json 不含 pi-multiloop（正常编辑）→ 放行
+  const okWrite = await evalIn("write", { path: settingsPath, content: '{"theme":"dark"}' }, cleanCwd, true);
+  check("multiloop-guard: normal settings.json edit passes through",
+    okWrite === undefined, JSON.stringify(okWrite));
+
+  // 7f. edit settings.json newText 含 pi-multiloop → deny
+  const blockedEdit = await evalIn("edit",
+    { path: settingsPath, edits: [{ oldText: '"npm:pi-subagents"', newText: '"npm:pi-subagents",\n    "npm:pi-multiloop"' }] },
+    cleanCwd, true);
+  check("multiloop-guard: edit settings.json adding pi-multiloop denied",
+    blockedEdit?.block === true, JSON.stringify(blockedEdit));
+
+  // 7g. 普通 md 文件提到 pi-multiloop（文档/预设文件）→ 不拦
+  const docOk = await evalIn("write", { path: "notes.md", content: "NOT included: pi-multiloop (fatal conflict)" }, cleanCwd, true);
+  check("multiloop-guard: ordinary files mentioning pi-multiloop pass",
+    docOk === undefined, JSON.stringify(docOk));
+
+  fs.rmSync(guardHome, { recursive: true, force: true });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

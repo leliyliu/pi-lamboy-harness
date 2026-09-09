@@ -727,7 +727,7 @@ export class GoalManager {
    * the whole conversation on every turn. The message is ephemeral
    * (context-event deep copy), so it is not persisted into the session.
    */
-  injectIntoMessages(messages: Array<{ role: string; content?: any }>): void {
+  injectIntoMessages(messages: Array<{ role: string; content?: any; timestamp?: number }>): void {
     const injection = this.buildInjection();
     if (!injection) return;
     messages.push({

@@ -222,7 +222,7 @@ YOLO permission mode is active. Actions are unconditionally allowed, but destruc
    * The message is ephemeral (context-event deep copy), so it is not
    * persisted into the session.
    */
-  injectIntoMessages(messages: Array<{ role: string; content?: any }>): void {
+  injectIntoMessages(messages: Array<{ role: string; content?: any; timestamp?: number }>): void {
     const injection = this.buildInjection();
     if (!injection) return;
     messages.push({

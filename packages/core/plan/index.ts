@@ -483,7 +483,7 @@ export class PlanManager {
    * The message is ephemeral (context-event deep copy), so it is not
    * persisted into the session.
    */
-  injectIntoMessages(messages: Array<{ role: string; content?: any }>): void {
+  injectIntoMessages(messages: Array<{ role: string; content?: any; timestamp?: number }>): void {
     if (!planModeState.isActive) return;
 
     // Detect if this is a consecutive injection (user just replied vs ongoing)
