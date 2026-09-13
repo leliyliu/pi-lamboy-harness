@@ -18,6 +18,7 @@
     "todo/**/*.ts",
     "tui/**/*.ts",
     "pause/**/*.ts",
+    "handoff/**/*.ts",
     "perf/**/*.ts",
     "latex/**/*.ts"
   ]

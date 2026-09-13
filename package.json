@@ -25,6 +25,7 @@
     "todo/",
     "tui/",
     "pause/",
+    "handoff/",
     "perf/",
     "latex/",
     "README.md",

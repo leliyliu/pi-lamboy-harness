@@ -114,6 +114,15 @@ pi                                                      # 重启 pi，然后试�
 - **超大工具结果落盘** — 超过截断阈值的结果写入 `<sessionDir>/tool-results/`，上下文中只保留净化后的头尾预览 + `output_path`，附 read 分页说明（`toolResultTruncation` 模式）
 - **窗口感知阈值** — 阈值随当前模型上下文窗口缩放（`max(40k, 窗口 × 4 字符/token)`，上限 800k 字符 ≈ 200k token），1M 上下文的模型可保留远多输出；`PI_TRUNCATION_THRESHOLD` 可显式覆盖
 
+### Session handoff（会话交接）
+- **交接而非压缩** — 不做有损 compaction，而是提取关键上下文并开一个专注的新会话；新会话头部自动记录 parent，交接 prompt 附带旧 transcript（JSONL）路径供原文回查
+- **`/handoff <goal>`** — 一次独立的摘要模型调用（可中止）把整段对话变成自包含的交接 briefing；你在编辑器里审阅/修改后才开新会话（预填该 prompt）
+- **`handoff` 工具** — 由持有全部上下文的 agent 自己写 briefing；草稿存为自定义条目（不进 LLM 上下文），turn 结束后编辑器预填 `/handoff`，一键确认；命令流程直接复用草稿不再重新生成
+- **Context guard** — 90% 用量时（每会话一次，`turn_end`）询问是否交接；确认则预填 `/handoff `，拒绝则本会话抑制（reload 后仍生效）
+- **压缩感知切片** — 摘要调用看到的与 LLM 一致：无 compaction → 全分支；`firstKeptEntryId`（旧式）→ summary + 保留切片；`retainedTail`（新式自包含检查点）→ summary + 物化尾部
+- **逃生开关** — `PI_LAMBOY_HANDOFF=0` 整体禁用，`PI_LAMBOY_HANDOFF_GUARD=0` 仅禁 guard，`PI_LAMBOY_HANDOFF_THRESHOLD` 触发百分比（10–100）
+- **设计说明** — 触发器结构参考 `ogulcancelik/pi-handoff`，执行路径采用 pi 官方 handoff 示例：扩展工具拿不到 `newSession`（ExtensionContext），所以所有会话切换都留在命令 handler 内，无 in-band agent hack
+
 ### Perf lab 模块（性能测量层）
 - **测量层定位** — 经 ssh 执行远程 GPU 基准、PyTorch profiler 分析与 A/B 显著性检验，与 pi-multiloop 松耦合（后者通过 verify 命令消费 `.perf/<run-id>.json`）
 - **`bench_run`** — N 轮基准 + MAD 离群剔除 + P50/P95（而非均值——GPU 计时噪声大），并采集环境快照（nvidia-smi 型号/驱动/时钟），跨日对比可发现环境漂移
@@ -144,6 +153,7 @@ pi                                                      # 重启 pi，然后试�
 | `/todo` | 任务计划（阶段模型）；子命令：`start` `done` `drop` `export` `import` `copy` `edit` `toggle` | `60-todo.ts` |
 | `/todo toggle` | 展开/折叠 todo 面板（替代原 `alt+t`） | `60-todo.ts` |
 | `/tui` | 编辑器样式/shimmer/timing 热切换 | `70-tui.ts` |
+| `/handoff [goal]` | 把上下文交接到一个专注的新会话（先生成/复用 briefing 并审阅） | `85-handoff.ts` |
 | `/compile [file]` | LaTeX 编译快捷命令（唯一 main .tex 自动识别） | `95-latex.ts` |
 
 > `/goal` `/plan` `/mode` `/tui` 均支持 Tab 子命令/参数补全。
@@ -156,6 +166,7 @@ pi                                                      # 重启 pi，然后试�
 | `enter_plan_mode` / `exit_plan_mode` | Plan Mode | `20-plan.ts` |
 | `ask_user_question` | 标签页结构化提问（多选、Other 自由文本） | `50-ask.ts` |
 | `todo_list` | 模型驱动的任务计划（内联面板） | `60-todo.ts` |
+| `handoff` | 把任务交给新会话：agent 自己写完整 briefing，用户经 `/handoff` 确认 | `85-handoff.ts` |
 | `bench_run` | 远程 GPU 基准（ssh 到主机，N 轮 P50/P95/MAD 统计 + 环境快照）；结果落盘 `.perf/<run-id>.json` 供 pi-multiloop 的 verify 命令消费 | `90-perf.ts` |
 | `profile_parse` | 解析 PyTorch profiler trace → 热点表（op/kernel、耗时占比、调用次数、形状） | `90-perf.ts` |
 | `metric_compare` | 两次 `.perf/` 结果的 Mann-Whitney 显著性检验 → improve/regress/noise 判定 | `90-perf.ts` |
@@ -180,6 +191,7 @@ pi-lamboy-harness/
 │   ├── 60-todo.ts         todo_list + /todo + 内联面板
 │   ├── 70-tui.ts          /tui + 编辑器 chrome + plan 徽标
 │   ├── 80-truncation.ts   工具结果落盘（窗口感知）
+│   ├── 85-handoff.ts      /handoff + handoff 工具 + context guard
 │   ├── 90-perf.ts         bench_run / profile_parse / metric_compare
 │   └── 95-latex.ts        latex_compile / bibtex_check + /compile
 ├── personal/              可选个人 pi 包（image2 + joyspace）— 单独安装
@@ -190,6 +202,7 @@ pi-lamboy-harness/
 │   ├── shell-output.ts    控制序列净化器
 │   ├── stream-rules/      stream 入口规则引擎（纯函数）
 │   ├── truncation/        超大工具结果落盘（纯函数）
+│   ├── handoff/           压缩感知分支切片 + 交接 prompt（纯函数）
 │   ├── completions.ts     命令参数补全（Tab 补全）
 │   ├── ask/               提问规格 + 答案格式化（纯函数）
 │   ├── todo/              todo 模型 + 折叠策略 + 认领/释放（纯函数）
@@ -201,6 +214,7 @@ pi-lamboy-harness/
 │   ├── latex/             tectonic 日志解析 + bib 一致性检查（纯函数）
 │   └── tui/               box/config/parse/switch/timing/spinner（纯 chrome 件）
 ├── pause/                 适配层：/pause 遮罩组件
+├── handoff/               适配层：/handoff 命令流程（生成 → 审阅 → 切换）
 ├── tui/                   适配层：LamboyEditor + 事件接线
 ├── ask/                   适配层：提问对话框 + ask_user_question 工具
 ├── todo/                  适配层：todo_list 工具 + 内联面板
@@ -249,7 +263,7 @@ cd /path/to/pi-lamboy-harness/personal/skills/joyspace-md-import/scripts && npm 
 
 ## 测试
 
-无需模型额度的 node 级单元测试（21 个套件，631 项断言）：
+无需模型额度的 node 级单元测试（22 个套件，686 项断言）：
 
 ```bash
 npm test                                        # 全部套件（node tests/run-all.mjs）
@@ -262,6 +276,7 @@ npm run typecheck                               # 全包 tsc 类型检查（stri
 node tests/approval-rpc.test.mjs                  # RPC 审批兜底（select/confirm）21 项
 node tests/ask.test.mjs                           # ask 规格/对话框/答案/审批标题 118 项
 node tests/goal.test.mjs                          # Goal 状态机 + 单调恢复 32 项
+node tests/handoff.test.mjs                       # 压缩感知切片 + guard/draft 状态 + 入口冒烟 55 项
 node tests/pause-gate.test.mjs                    # 暂停门禁 + 全屏渲染 54 项
 node tests/permission.test.mjs                    # Permission 守卫层链 20 项
 node tests/perf-adapter.test.mjs                  # perf 适配器 mock-ssh 全链路 9 项
@@ -331,6 +346,10 @@ node tests/latex-adapter.test.mjs                  # latex 工具 + /compile（m
 - Goal 状态转换逻辑
 - Budget 检查机制
 - Recovery Machine 概念（简化版）
+
+### [ogulcancelik/pi-extensions](https://github.com/ogulcancelik/pi-extensions)（ogulcancelik）— `pi-handoff` 包
+- 三触发器交接结构（命令 / 工具 / context guard）与“每会话一次 + 自定义条目持久化抑制”的 guard 设计
+- 其弃用 README 同时记录了本 harness 刻意避开的坑：扩展工具拿不到 `newSession`，故所有会话切换都留在命令 handler 内（即 pi 官方 handoff 示例的路径）
 
 ---
 

@@ -125,6 +125,15 @@ All tools are model-callable, all commands are slash commands with Tab completio
 - **Oversized tool results spill to disk** — results over the spill threshold are written to `<sessionDir>/tool-results/` and replaced in context with a sanitized head+tail preview carrying the `output_path` and read-paging instructions (`toolResultTruncation` pattern)
 - **Window-aware threshold** — the threshold scales with the active model's context window (`max(40k, window × 4 chars/token)`, capped at 800k chars ≈ 200k tokens), so 1M-context models keep far more output in-context; `PI_TRUNCATION_THRESHOLD` overrides it explicitly
 
+### Session handoff
+- **Transfer, don't compact** — instead of lossy compaction, handoff extracts what matters and starts a new focused session; the new session's header records the parent, and the prompt carries a pointer to the old transcript (JSONL) for raw lookups
+- **`/handoff <goal>`** — one dedicated summarization call (abortable loader) turns the whole conversation into a self-contained briefing prompt; you review/edit it in the editor before the new session starts prefilled with it
+- **`handoff` tool** — the agent (which holds the context) writes the briefing itself; the draft is parked as a custom entry (never enters LLM context), and at turn end the editor is prefilled with `/handoff` for one-keystroke confirmation — the command flow then reuses the draft without regenerating
+- **Context guard** — at 90% usage (once per session, `turn_end`) you're asked whether to handoff; confirm prefills `/handoff `, declining suppresses the guard for the session (durable across reloads)
+- **Compaction-aware slicing** — the briefing call sees the same context the LLM does: no compaction → whole branch; `firstKeptEntryId` (legacy) → summary + kept slice; `retainedTail` (newer self-contained checkpoints) → summary + materialized tail
+- **Kill switches** — `PI_LAMBOY_HANDOFF=0` disables the extension, `PI_LAMBOY_HANDOFF_GUARD=0` only the guard, `PI_LAMBOY_HANDOFF_THRESHOLD` sets the trigger percent (10–100)
+- **Design note** — trigger structure follows `ogulcancelik/pi-handoff`, execution path follows pi's official handoff example: extension tools have no `newSession` (ExtensionContext), so all session switching stays inside the command handler; no in-band agent hacks
+
 ### Perf lab
 - **Measurement layer** — remote GPU benchmarks via ssh, PyTorch profiler analysis, and A/B significance testing, decoupled from pi-multiloop (which consumes `.perf/<run-id>.json` via verify commands)
 - **`bench_run`** — N-run benchmark with MAD outlier rejection and P50/P95 (not the mean — GPU timing is noisy), plus an env snapshot (nvidia-smi model/driver/clocks) so cross-day comparisons catch environment drift
@@ -155,6 +164,7 @@ All tools are model-callable, all commands are slash commands with Tab completio
 | `/todo` | Task plan with phase model; shortcuts: `start` `done` `drop` `export` `import` `copy` `edit` `toggle` | `60-todo.ts` |
 | `/todo toggle` | Expand/collapse the todo panel (replaces former `alt+t`) | `60-todo.ts` |
 | `/tui` | Hot-switch editor style/shimmer/timing | `70-tui.ts` |
+| `/handoff [goal]` | Transfer context to a new focused session (reviews the generated/agent-drafted briefing first) | `85-handoff.ts` |
 | `/compile [file]` | LaTeX compile shortcut (auto-detects the single main `.tex`) | `95-latex.ts` |
 
 > `/goal` `/plan` `/mode` `/tui` all support Tab completion.
@@ -167,6 +177,7 @@ All tools are model-callable, all commands are slash commands with Tab completio
 | `enter_plan_mode` / `exit_plan_mode` | Plan mode | `20-plan.ts` |
 | `ask_user_question` | Tabbed structured questions (multi-select, Other free text) | `50-ask.ts` |
 | `todo_list` | Model-driven task plan with inline panel | `60-todo.ts` |
+| `handoff` | Hand the task to a fresh session: agent writes the full briefing prompt, user confirms via `/handoff` | `85-handoff.ts` |
 | `bench_run` | Remote GPU benchmark (ssh to host, N-run P50/P95/MAD stats, env snapshot); results persist to `.perf/<run-id>.json` for pi-multiloop verify-command consumption | `90-perf.ts` |
 | `profile_parse` | Parse a PyTorch profiler trace into a hotspot table (op/kernel, self-time %, calls, shapes) | `90-perf.ts` |
 | `metric_compare` | Mann-Whitney significance test between two `.perf/` results → improve/regress/noise verdict | `90-perf.ts` |
@@ -192,6 +203,7 @@ pi-lamboy-harness/
 │   ├── 60-todo.ts         todo_list + /todo + inline panel
 │   ├── 70-tui.ts          /tui + editor chrome + plan badge
 │   ├── 80-truncation.ts   tool-result spill (window-aware)
+│   ├── 85-handoff.ts      /handoff + handoff tool + context guard
 │   ├── 90-perf.ts         bench_run / profile_parse / metric_compare
 │   └── 95-latex.ts        latex_compile / bibtex_check + /compile
 ├── personal/              optional personal pi package (image2 + joyspace) — install separately
@@ -202,6 +214,7 @@ pi-lamboy-harness/
 │   ├── shell-output.ts    control-sequence sanitizer
 │   ├── stream-rules/      stream entry rule engine (pure)
 │   ├── truncation/        oversized tool-result spill (pure)
+│   ├── handoff/           compaction-aware branch slicing + briefing prompt (pure)
 │   ├── completions.ts     slash-command argument completions
 │   ├── ask/               question spec + formatting (pure)
 │   ├── todo/              todo model + folding strategy + claim/release (pure)
@@ -213,6 +226,7 @@ pi-lamboy-harness/
 │   ├── latex/             tectonic log parse + bib consistency check (pure)
 │   └── tui/               box/config/parse/switch/timing/spinner (pure chrome parts)
 ├── pause/                 adapter: /pause overlay component
+├── handoff/               adapter: /handoff command flow (generate → review → switch)
 ├── tui/                   adapter: LamboyEditor + event wiring
 ├── ask/                   adapter: question dialog + ask_user_question tool
 ├── todo/                  adapter: todo_list tool + inline panel widget
@@ -261,7 +275,7 @@ cd /path/to/pi-lamboy-harness/personal/skills/joyspace-md-import/scripts && npm 
 
 ## Tests
 
-Pure node-level unit tests, no model quota needed (21 suites, 631 assertions):
+Pure node-level unit tests, no model quota needed (22 suites, 686 assertions):
 
 ```bash
 npm test                                        # all suites (node tests/run-all.mjs)
@@ -274,6 +288,7 @@ or individually:
 node tests/approval-rpc.test.mjs                  # RPC approval fallback (select/confirm) — 21
 node tests/ask.test.mjs                           # ask spec/dialog/answers/approval titles — 118
 node tests/goal.test.mjs                          # Goal state machine + monotonic restore — 32
+node tests/handoff.test.mjs                       # compaction-aware slicing + guard/draft state + entry smoke — 55
 node tests/pause-gate.test.mjs                    # pause gate + full-screen render — 54
 node tests/permission.test.mjs                    # Permission guard-layer chain — 20
 node tests/perf-adapter.test.mjs                  # perf adapter mock-ssh full chain — 9
@@ -345,6 +360,10 @@ Design and implementation inspired by these open-source projects:
 - Goal state transitions
 - Budget checking
 - Recovery Machine concept (simplified)
+
+### [ogulcancelik/pi-extensions](https://github.com/ogulcancelik/pi-extensions) (ogulcancelik) — `pi-handoff` package
+- Three-trigger handoff structure (command / tool / context guard) and once-per-session guard suppression via custom entries
+- Its deprecation README also documented the exact pitfall this harness avoids: extension tools have no `newSession`, so all session switching stays in the command handler (pi's official handoff example path)
 
 ---
 
