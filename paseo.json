@@ -1,0 +1,8 @@
+{
+  "worktree": {
+    "setup": [
+      "if [ -n \"$PASEO_SOURCE_CHECKOUT_PATH\" ] && [ -d \"$PASEO_SOURCE_CHECKOUT_PATH/vendor/sol-pi\" ]; then git clone --quiet \"$PASEO_SOURCE_CHECKOUT_PATH/vendor/sol-pi\" vendor/sol-pi && git -C vendor/sol-pi checkout --quiet \"$(git ls-tree HEAD vendor/sol-pi | awk '{print $3}')\"; else git submodule update --init --recursive; fi",
+      "npm install --prefer-offline"
+    ]
+  }
+}
