@@ -11,8 +11,9 @@ Fork 自 [MuseLinn/pi-muselinn-harness](https://github.com/MuseLinn/pi-muselinn-
 ## Quick start
 
 ```bash
-# Full install (all 10 module entries load)
+# Full install (all 11 module entries load)
 pi install git:github.com/leliyliu/pi-lamboy-harness   # or: pi install /path/to/pi-lamboy-harness
+#   (clone recursively to get the SoL-Pi submodule: git clone --recursive)
 
 # Or minimal install (filtered to 8 entries; perf/latex off) —
 # write the object-form entry in settings.json, or just use a preset (see Presets below)
@@ -136,6 +137,13 @@ All tools are model-callable, all commands are slash commands with Tab completio
 - **`/compile [file]`** — slash-command shortcut; no argument scans the directory for the single main `.tex`
 - **Prerequisite** — requires `tectonic` (`brew install tectonic`); graceful "tectonic not found" error otherwise
 
+### SoL-Pi (token efficiency)
+- **Vendored** — NVlabs/SoL-Pi as a git submodule (`vendor/sol-pi`, pinned `d7ecfc0`, MIT), trimmed to its two local-only mechanisms; entry `extensions/96-solpi.ts`, kill switch `PI_LAMBOY_SOLPI=0`
+- **Action Fusion** — `edit`/`write` gain an optional `then_run` argument: the follow-up command (build/test/run) executes inside the same tool call, removing one model round-trip per edit-validate sequence
+- **ObservationPack** — large tool results are archived under the session dir after their first sends; later requests see a stable handle instead of a replay, and `obs_recall` (id + byte offset) pages exact content back on demand
+- **Deliberately trimmed out** — Evidence-Preserving Reducer (sends logs to a reducer model; overlaps with 80-truncation) and Online Context Compact (depends on `agent_settled`/`compact()` semantics pinned to pi 0.84.2)
+- **Verified** — SoL-Pi upstream suite 139/139 + harness `tests/solpi-entry.test.mjs` 4/4 + real pi 0.85.1 `loadExtensions` smoke run (edit/write/obs_recall + context hook, zero errors)
+
 ## Commands
 
 | Command | Description | Entry |
@@ -219,7 +227,7 @@ What's installed is decided solely by the `packages` array in `~/.pi/agent/setti
 
 | File | Purpose |
 |------|---------|
-| `minimal.v0.1.json` | Minimal unit: harness 8/10 entries (perf/latex filtered out) + personal + 5 full packages (subagents/web-access/research/mcp-adapter/focus-bell) + pie filtered to loop/files/powerline-footer + grill-with-docs skill |
+| `minimal.v0.1.json` | Minimal unit: harness 8/11 entries (perf/latex/solpi filtered out) + personal + 5 full packages (subagents/web-access/research/mcp-adapter/focus-bell) + pie filtered to loop/files/powerline-footer + grill-with-docs skill |
 | `full.snapshot.2026-09-06.json` | Full baseline: the original 13 packages + personal + grill |
 | `switch.mjs` | Switch script: timestamped backup → atomic packages-array replace → sideline loose copies into `disabled/` → before/after diff |
 | `catalog.md` | Add-back menu + conflict rules |

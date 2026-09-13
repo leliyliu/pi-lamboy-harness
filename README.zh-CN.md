@@ -11,8 +11,9 @@ Fork 自 [MuseLinn/pi-muselinn-harness](https://github.com/MuseLinn/pi-muselinn-
 ## 快速开始
 
 ```bash
-# 全量安装（10 模块全部加载）
+# 全量安装（11 模块全部加载，含 SoL-Pi 子模块）
 pi install git:github.com/leliyliu/pi-lamboy-harness   # 或: pi install /path/to/pi-lamboy-harness
+#   （本地开发请递归克隆以获取 SoL-Pi 子模块：git clone --recursive）
 
 # 或最小集安装（过滤到 8 模块：perf/latex 不加载）
 # 手动在 settings.json 写入 object-form 条目，或直接用预设切换（见下）
@@ -125,6 +126,13 @@ pi                                                      # 重启 pi，然后试�
 - **`/compile [file]`** — slash 快捷命令；无参数时扫描目录内唯一 main `.tex`
 - **前置依赖** — 需要 `tectonic`（`brew install tectonic`）；缺失时返回友好的 "tectonic not found" 错误
 
+### SoL-Pi 模块（token 效率）
+- **Vendored 集成** — NVlabs/SoL-Pi 以 git 子模块引入（`vendor/sol-pi`，固定 `d7ecfc0`，MIT 协议），裁剪为仅有的两个纯本地机制；入口 `extensions/96-solpi.ts`，逃生开关 `PI_LAMBOY_SOLPI=0`
+- **Action Fusion（动作融合）** — `edit`/`write` 新增可选 `then_run` 参数：后续验证命令（build/test/run）在同一工具调用内执行，每次“编辑+验证”序列少一次模型往返
+- **ObservationPack（观察归档）** — 大工具结果首次发送后归档到会话目录；后续请求只看稳定句柄不再重放，`obs_recall`（id + 字节偏移）按需分页召回原文
+- **刻意裁掉** — Evidence-Preserving Reducer（需外发日志到 reducer 模型；与 80-truncation 功能重叠）与 Online Context Compact（依赖官方锁定 0.84.2 的 `agent_settled`/`compact()` 语义）
+- **已验证** — SoL-Pi 上游套件 139/139 + harness `tests/solpi-entry.test.mjs` 4/4 + 真实 pi 0.85.1 `loadExtensions` 冒烟（edit/write/obs_recall + context hook，零错误）
+
 ## 命令
 
 | 命令 | 说明 | 入口 |
@@ -207,7 +215,7 @@ pi-lamboy-harness/
 
 | 文件 | 作用 |
 |------|------|
-| `minimal.v0.1.json` | 最小单元：harness 8/10 模块（perf/latex 过滤掉）+ personal + 5 个整包（subagents/web-access/research/mcp-adapter/focus-bell）+ pie 过滤为 loop/files/powerline-footer + grill-with-docs skill |
+| `minimal.v0.1.json` | 最小单元：harness 8/11 模块（perf/latex/solpi 过滤掉）+ personal + 5 个整包（subagents/web-access/research/mcp-adapter/focus-bell）+ pie 过滤为 loop/files/powerline-footer + grill-with-docs skill |
 | `full.snapshot.2026-09-06.json` | 全量基线：原 13 包 + personal + grill |
 | `switch.mjs` | 切换脚本：时间戳备份 → 原子替换 packages 数组 → 散落副本移入 `disabled/` → 前后 diff 报告 |
 | `catalog.md` | 按需加回菜单 + 冲突规则 |
