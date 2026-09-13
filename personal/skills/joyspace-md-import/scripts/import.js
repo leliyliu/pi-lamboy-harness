@@ -11,6 +11,7 @@
  *   --headless           无头模式（首次登录时不要用，需扫码）
  *   --no-verify          跳过刷新验证
  *   --clear-only         仅清空目标文档，不插入内容（调试用）
+ *   --append             追加模式：保留现有内容，在文档末尾插入（不清空）
  *
  * 前置条件：
  *   - 当前目录或上级已安装 playwright（npm install playwright）
@@ -41,6 +42,8 @@ const userData = arg('user-data', path.join(__dirname, '..', '.userdata'));
 const headless = flag('headless');
 const noVerify = flag('no-verify');
 const clearOnly = flag('clear-only');
+const appendMode = flag('append'); // 追加模式：保留现有内容，在文档末尾插入
+const dryRun = flag('dry-run');     // 仅解析并自检，不启动浏览器、不写文档
 
 if (!mdPath || !url) {
   console.error('用法: node import.js --md <md文件> --url <joyspaceURL> [--img-base <dir>] [--headless] [--no-verify]');
@@ -138,11 +141,47 @@ function parseInline(text) {
   }
   return leaves.length ? leaves : [{ text: '' }];
 }
-function splitRow(l) { let s = l.trim(); if (s[0] === '|') s = s.slice(1); if (s.endsWith('|')) s = s.slice(0, -1); return s.split('|'); }
+// 表格行切分。遵循 GFM 表格规则（否则含正则的单元格会被切碎）：
+//   1) 单元格内的 `\|` 是转义竖线，须还原为字面 `|`（GFM 转义在表格层生效，代码跨度内同样如此）
+//   2) 反引号代码跨度内的 `|` 不作为列分隔符
+//   3) 只剥离首尾“未被转义”的竖线分隔符
+function splitRow(l) {
+  let s = l.trim();
+  const escapedAt = (str, i) => { let n = 0; for (let k = i - 1; k >= 0 && str[k] === '\\'; k--) n++; return n % 2 === 1; };
+  if (s[0] === '|') s = s.slice(1);
+  if (s.length && s[s.length - 1] === '|' && !escapedAt(s, s.length - 1)) s = s.slice(0, -1);
+  const cells = []; let buf = ''; let inCode = false; let fence = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\' && (s[i + 1] === '|' || s[i + 1] === '\\')) { buf += s[i + 1]; i++; continue; }
+    if (ch === '`') {
+      let n = 0; while (s[i + n] === '`') n++;
+      if (!inCode) { inCode = true; fence = n; } else if (n === fence) { inCode = false; fence = 0; }
+      buf += s.slice(i, i + n); i += n - 1; continue;
+    }
+    if (ch === '|' && !inCode) { cells.push(buf); buf = ''; continue; }
+    buf += ch;
+  }
+  cells.push(buf);
+  return cells;
+}
 function parseTable(lines, i) {
-  const header = splitRow(lines[i]); const rows = [header]; let j = i + 2;
-  while (j < lines.length && lines[j].trim().startsWith('|')) { rows.push(splitRow(lines[j])); j++; }
-  const w = Array(header.length).fill(Math.floor(770 / header.length));
+  const header = splitRow(lines[i]);
+  const nCol = header.length;
+  const rows = [header];
+  let j = i + 2; let ragged = 0;
+  while (j < lines.length && lines[j].trim().startsWith('|')) {
+    const r = splitRow(lines[j]);
+    if (r.length !== nCol) {
+      // 容错兜底：补齐/截断到表头列数，防止出现列数不齐的畸形表格（JoySpace 会渲染错乱）
+      ragged++;
+      while (r.length < nCol) r.push('');
+      if (r.length > nCol) r.length = nCol;
+    }
+    rows.push(r); j++;
+  }
+  if (ragged) console.log(`  [warn] 表格(起始行${i + 1}) 有 ${ragged} 行与表头列数(${nCol})不一致，已归一化`);
+  const w = Array(nCol).fill(Math.floor(770 / nCol));
   return { node: { type: 'table', width: w, children: rows.map(r => ({ type: 'table-row', children: r.map(c => ({ type: 'table-cell', children: [{ type: 'p', children: parseInline(c.trim()) }] })) })) }, next: j };
 }
 function buildNodes(mdText, imgUrlMap) {
@@ -171,6 +210,11 @@ function buildNodes(mdText, imgUrlMap) {
     if (pl.length === 0 && i < lines.length) { pl.push(lines[i]); i++; }
     if (pl.length) nodes.push({ type: 'p', children: parseInline(pl.join(' ')) });
   }
+  // JoySpace 的 schema 要求表格后必须有段落。若文档以表格结尾，
+  // 末尾表格在协同保存落地时会被丢弃/降级为段落（实测复现），故补一个空段落。
+  while (nodes.length && nodes[nodes.length - 1].type === 'table') {
+    nodes.push({ type: 'p', children: [{ text: '' }] });
+  }
   return nodes;
 }
 // 先构建一次拿到模板（img url 待填）
@@ -179,6 +223,26 @@ const typeCount = {};
 nodesTemplate.forEach(n => { typeCount[n.type] = (typeCount[n.type] || 0) + 1; });
 console.log(`\n[2/6] 解析 markdown → ${nodesTemplate.length} 个 Slate 节点`);
 console.log('  类型: ' + JSON.stringify(typeCount));
+
+// ---------- 2.5 离线自检（--dry-run）：不启动浏览器，只校验解析结果 ----------
+if (dryRun) {
+  const tables = nodesTemplate.filter(n => n.type === 'table');
+  let bad = 0;
+  tables.forEach((t, k) => {
+    const counts = [...new Set((t.children || []).map(r => (r.children || []).length))];
+    const okCols = counts.length === 1 && counts[0] === (t.width || []).length;
+    const cellText = (c) => (c.children || []).map(x => (x.children || []).map(l => l.text).join('')).join('');
+    if (!okCols) { bad++; console.log(`  [BAD] 表${k + 1} 列数集合=${JSON.stringify(counts)} width长度=${(t.width || []).length}`); }
+    if (arg('tables')) {
+      console.log(`  表${String(k + 1).padStart(2)} 行=${t.children.length} 列=${counts[0]} 表头=${JSON.stringify((t.children[0].children || []).map(cellText))}`);
+    }
+  });
+  console.log(`  [dry-run] 表格自检：${tables.length} 张表，畸形 ${bad} 张`);
+  const out = arg('out');
+  if (out) { fs.writeFileSync(out, JSON.stringify(nodesTemplate, null, 2)); console.log(`  [dry-run] 节点树已写入 ${out}`); }
+  console.log('  [dry-run] 不写文档，退出。');
+  process.exit(bad ? 3 : 0);
+}
 
 // ---------- 3. 启动浏览器，登录 ----------
 console.log(`\n[3/6] 启动浏览器 (headless=${headless})`);
@@ -293,6 +357,28 @@ finalNodes.forEach(addId);
 
 // 重新定位 editor（可能因上传操作失焦）
 await locateEditor();
+
+if (appendMode) {
+  // ---------- 追加模式：光标移到文档末尾，insertFragment ----------
+  const preStats = await page.evaluate(() => {
+    const ed = window.__E__;
+    return { c: ed.children.length, first: JSON.stringify(ed.children[0]).slice(0, 80) };
+  });
+  console.log('  [append] 追加前节点数: ' + preStats.c);
+  const insR = await page.evaluate((nj) => {
+    const ed = window.__E__; const ns = JSON.parse(nj);
+    const lastLeaf = (arr, pre) => { for (let i = arr.length - 1; i >= 0; i--) { const n = arr[i], p = [...pre, i]; if (typeof n.text === 'string') return { path: p, len: n.text.length }; if (n.children?.length) { const r = lastLeaf(n.children, p); if (r) return r; } } return null; };
+    const r = lastLeaf(ed.children, []) || { path: [Math.max(ed.children.length - 1, 0), 0], len: 0 };
+    try {
+      ed.selection = { anchor: { path: r.path, offset: r.len }, focus: { path: r.path, offset: r.len } };
+      ed.insertFragment(ns);
+      return { ok: true, c: ed.children.length, at: r.path.join(',') };
+    } catch (e) { return { ok: false, err: e.message }; }
+  }, JSON.stringify(finalNodes));
+  console.log('  [append] 插入: ' + JSON.stringify(insR) + ' (追加 ' + finalNodes.length + ' 节点)');
+  if (!insR.ok) { console.error('!! 追加失败'); await browser.close(); process.exit(1); }
+  await page.waitForTimeout(3000);
+} else {
 // 清空：deleteFragment 全选删除（协同保存）
 const clearR = await page.evaluate(() => {
   const ed = window.__E__;
@@ -323,6 +409,7 @@ const insR = await page.evaluate((nj) => {
 console.log('  插入: ' + JSON.stringify(insR));
 if (!insR.ok) { console.error('!! 插入失败'); await browser.close(); process.exit(1); }
 await page.waitForTimeout(3000);
+}
 
 // 当前会话验证
 const v1 = await page.evaluate(() => {

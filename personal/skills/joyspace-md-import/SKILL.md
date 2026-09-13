@@ -108,6 +108,16 @@ node ~/.pi/agent/skills/joyspace-md-import/scripts/import.js \
 | `--headless` | 无头模式（首次登录勿用） | 关 |
 | `--no-verify` | 跳过刷新验证 | 关 |
 | `--clear-only` | 仅清空目标文档 | 关 |
+| `--append` | 追加模式：保留现有内容，在文档末尾插入（不清空） | 关 |
+
+### 辅助脚本
+
+| 脚本 | 用途 |
+|---|---|
+| `export.js` | 导出 JoySpace 文档为 markdown（--url 必需，--out 输出路径） |
+| `inspect.js` | 打印前 N 个节点结构（--n，调试用） |
+| `fix.js` | 修复追加后残留：--remove-imgs N 删头部残留图，--restore-text 恢复首段文本 |
+| `shot.js` | 全页截图（--out） |
 
 ### 辅助工具：SVG 转 PNG
 
@@ -164,6 +174,7 @@ node scripts/svg2png.js --batch ./svgs --out ./pngs --scale 2
 | `未找到 Slate editor` | 页面未加载完 / SPA 未挂载 | 增加等待时间，确认 `.slate-editor` 存在 |
 | 刷新后内容丢失 | 用了 `children=nodes` 而非 `insertFragment` | 本脚本已用 `insertFragment`，勿改 |
 | 表格未转换 | 用了粘贴而非 insertFragment | 本脚本自建节点，不依赖粘贴解析 |
+| 追加后头部多出残留图片 / 首段被清空 | 图片上传流程的 clearForUpload 非协同赋值可能被服务端保留 | 用 `fix.js --remove-imgs N --restore-text "原文"` 修复；首段为空时页面标题会变 Untitled（标题从首段提取），恢复首段文本后自动复原 |
 | 图片上传失败 | 剪贴板权限/网络 | 检查 `permissions: ['clipboard-write']`，重试 |
 | `Cannot find module 'playwright'` | 未安装依赖 | `cd scripts && npm install playwright` |
 | npm install 清空了同目录数据 | npm 行为 | **数据文件不要放在 scripts 目录**，脚本已默认用 `.userdata`/`.tmp-png` 子目录隔离 |

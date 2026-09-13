@@ -9,6 +9,10 @@ Thumbs.db
 # local worktrees (superpowers SDD)
 .worktrees/
 
+# joyspace skill: headless Chrome profile (login state) & screenshot artifacts
+personal/skills/joyspace-md-import/.userdata/
+personal/skills/joyspace-md-import/*.png
+
 # perf-lab benchmark results
 .perf/
 
