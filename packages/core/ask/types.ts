@@ -26,7 +26,7 @@ export interface QuestionSpec {
   /** Short tab label (≤ MAX_HEADER_LEN chars) for multi-question dialogs. */
   header?: string;
   options: OptionSpec[];
-  /** Checkbox semantics: Space toggles, Enter confirms the question. */
+  /** Checkbox semantics: Space toggles; Enter confirms the question (or picks the cursor option when nothing is toggled yet). */
   multiSelect?: boolean;
   /** Append a synthetic free-text "Other" option (ask tool default). */
   allowOther?: boolean;

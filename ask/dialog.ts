@@ -4,8 +4,9 @@
 // One component drives the whole question set: a tab strip on top
 // when there is more than one question (1/3 · header, ←/→/Tab to
 // switch), numbered options with description sub-lines, checkbox
-// semantics for multi_select (Space toggles, Enter confirms), and a
-// synthetic Other option that opens a free-text input. Digit keys
+// semantics for multi_select (Space toggles; Enter confirms — or, when
+// nothing is toggled yet, Enter picks the option under the cursor),
+// and a synthetic Other option that opens a free-text input. Digit keys
 // 1-9 still jump straight to an option; Esc cancels everything.
 // Answering the last open question lands on a submit page; single
 // question dialogs (e.g. permission approval) finish immediately.
@@ -400,6 +401,11 @@ export class QuestionDialogComponent extends Container {
 
     if (matchesKey(keyData, Key.enter)) {
       if (st.spec.multiSelect && !st.isOther(st.cursor) && !st.isChat(st.cursor)) {
+        // Enter with an EMPTY selection picks the option under the cursor
+        // first (single-select muscle memory: move cursor, hit Enter) —
+        // without this the question is silently confirmed with no answer
+        // and later reported as "skipped by user" (start-my-day bug).
+        if (!st.isAnswered()) st.activate(st.cursor); // toggles the cursor option on
         this.advance(); // Enter confirms the whole question in multi mode
         return;
       }
@@ -689,7 +695,7 @@ export class QuestionDialogComponent extends Container {
     const tabs = this.multi ? " · ←→/Tab switch" : "";
     const note = st.hasAnyPreviewOption() ? " · n note" : "";
     if (st.spec.multiSelect) {
-      return `↑↓/jk move · 1-9/Space toggle · Enter confirm${note}${tabs} · Esc cancel`;
+      return `↑↓/jk move · 1-9/Space toggle · Enter pick/confirm${note}${tabs} · Esc cancel`;
     }
     return `↑↓/jk navigate · 1-9 select · Enter confirm${note}${tabs} · Esc cancel`;
   }
