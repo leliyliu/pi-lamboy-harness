@@ -8,8 +8,8 @@
 // ============================================================
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { goalManager } from "../packages/core/goal";
-import { GOAL_ENTRY_TYPE } from "../packages/core/goal/types";
+import { goalManager } from "../packages/core/goal/index.ts";
+import { GOAL_ENTRY_TYPE } from "../packages/core/goal/types.ts";
 import type { PersistencePort } from "../packages/core/ports";
 
 export default function (pi: ExtensionAPI) {
@@ -123,6 +123,22 @@ export default function (pi: ExtensionAPI) {
   // ── turn_end: record token usage + budget check (pi-codex-goal style) ──
   pi.on("turn_end", (event, _ctx) => {
     const msg = event.message as any;
+
+    // ── usage_limited self-heal (quant02 2026-09-16 incident fix) ──
+    // A completed assistant turn (stopReason other than "error") means the
+    // provider is serving again: an active 429 (jdcloud "tokens limit for
+    // minute") fails the generation itself. Resume without waiting for the
+    // model to call update_goal — the incident showed GLM-5.3 stalling on the
+    // old injection wording for 6+ rounds even when the user pasted the
+    // exact command. budget_limited stays user-reserved (monotonic
+    // tokensUsed would re-limit immediately).
+    if (msg?.role === "assistant" && msg?.stopReason && msg.stopReason !== "error") {
+      if (goalManager.getGoal()?.status === "usage_limited") {
+        goalManager.resume("runtime");
+        _ctx.ui.notify("Goal auto-resumed: provider rate-limit window cleared", "info");
+      }
+    }
+
     if (msg?.role === "assistant" && msg?.usage) {
       const tokens = (msg.usage.input || 0) + (msg.usage.output || 0);
       if (tokens > 0) {

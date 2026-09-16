@@ -475,14 +475,19 @@ export class GoalManager {
   /**
    * Build wrap-up instruction for budget_limited/usage_limited goals.
    *
-   * usage_limited (provider 429) is a temporary external limit: once the
-   * rate-limit window clears the goal can self-recover via
-   * update_goal(status="active"). Repeated attempts before the window clears
-   * re-trigger detectProviderLimitError (natural cooldown loop).
+   * usage_limited (provider 429) is a temporary external limit. The window
+   * is OBSERVABLE from inside: while it is active the generation itself
+   * fails, so any response the model produces proves the window cleared.
+   * The instruction therefore demands immediate self-recovery via
+   * update_goal(status="active") — the old "tool calls are blocked / once
+   * the window clears you may call" wording made GLM-5.3 treat EVERY tool
+   * as blocked and the recovery condition as unknowable, stalling the
+   * goal for 6+ rounds even when the user pasted the exact command
+   * (quant02 incident, session 2026-09-16T02-40-50).
    *
-   * budget_limited (user tokenBudget) is reserved for user decision: tokensUsed
-   * is monotonic, so an LLM auto-recover would re-limit immediately and burn
-   * tokens. Wait for set_goal_budget / /goal resume.
+   * budget_limited (user tokenBudget) is reserved for user decision:
+   * tokensUsed is monotonic, so an LLM auto-recover would re-limit
+   * immediately and burn tokens. Wait for set_goal_budget / /goal resume.
    */
   buildWrapUpInjection(): string | undefined {
     const g = goalState.current;
@@ -491,14 +496,15 @@ export class GoalManager {
     const statusLabel = g.status === "budget_limited" ? "Token budget exceeded" : "Provider quota exhausted";
     if (g.status === "usage_limited") {
       return [
-        `⚠️ ${statusLabel}. Tool calls are blocked while the rate-limit window is active.`,
+        `⚠️ ${statusLabel} — the goal is paused as usage_limited.`,
         ``,
-        `Provide a brief wrap-up:`,
-        `- Progress made so far`,
-        `- Results achieved`,
-        `- Blockers encountered`,
+        `The rate-limit window has ALREADY cleared: you are generating this very response, and an active 429 would have failed the generation itself.`,
         ``,
-        `Once the provider quota window clears, you may call update_goal(status="active") to resume this goal. Do NOT call create_goal.`,
+        `Resume now:`,
+        `1. Call update_goal(status="active") — this tool and get_goal are always available while usage_limited.`,
+        `2. Continue working on the goal where it left off.`,
+        ``,
+        `Do NOT call create_goal. Do NOT write a wrap-up summary — the goal is paused, not ended.`,
       ].join("\n");
     }
     return [

@@ -123,7 +123,7 @@ export function registerGoalTools(pi: any, goalManager: GoalManager): void {
           type: "string",
           enum: ["active", "paused", "blocked", "complete"],
           description:
-            "New status for the goal. 'active' resumes from paused/blocked/usage_limited (e.g. self-recover after a provider 429 clears). Note: 'complete' requires verified=true in the same call when the goal declared a completion_criterion.",
+            "New status for the goal. 'active' resumes from paused/blocked/usage_limited — after a provider 429 you are still able to generate responses, which means the window has cleared: call it immediately. Note: 'complete' requires verified=true in the same call when the goal declared a completion_criterion.",
         },
         objective: { type: "string", description: "Updated objective (optional)" },
         reason: { type: "string", description: "Reason for status change (optional)" },

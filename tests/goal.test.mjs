@@ -312,6 +312,44 @@ reset();
     goalManager.getGoal()?.status);
 }
 
+// ── 11. usage_limited wrap-up 文案改版（quant02 2026-09-16 429 卡死事故） ──
+// 根因证据: quant02 session 02:40:50, 06:02–06:07 五轮, GLM-5.3 的 thinking
+// 均引述旧文案 "tool calls are blocked / once the window clears, I may
+// call update_goal" → 认定一切工具被阻塞且恢复条件不可观测, 连用户原样
+// 贴出 update_goal(status="active") 都拒绝执行。
+// 新文案: 明示 get_goal/update_goal 始终可用 + "能生成本回复=限流窗已过"
+// 的可观测恢复判据 + 立即恢复指令。
+reset();
+{
+  goalManager.createGoal("wrap-up wording probe");
+  goalManager.markUsageLimited("429 tokens limit for minute");
+  const text = goalManager.buildWrapUpInjection() ?? "";
+
+  check("wrap-up 不再断言一刀切 'Tool calls are blocked'",
+    !/Tool calls are blocked/.test(text), text.slice(0, 100));
+  check("wrap-up 不再把恢复当许可式前提（may call → 立即恢复）",
+    !/Once the provider quota window clears, you may call/.test(text), "");
+  check("wrap-up 含立即恢复指令 update_goal(status=\"active\")",
+    /update_goal\(status="active"\)/.test(text), "");
+  check("wrap-up 给出可观测恢复判据（正在生成本回复=窗口已过）",
+    /generating this/i.test(text), "");
+  check("wrap-up 仍禁止 create_goal", /Do NOT call create_goal/.test(text), "");
+  check("wrap-up 明示不再要求 wrap-up 小结（改要求继续干活）",
+    /Do NOT write a wrap-up summary/.test(text), "");
+}
+
+// ── 12. shouldBlockTool 允许名单与注入文案声明一致 ──────────────────────
+// 注入文案称 get_goal/update_goal 始终可用——本组锁定 core 层允许名单语义,
+// 防止文案与 shouldBlockTool 漂移。
+reset();
+{
+  goalManager.createGoal("allowlist probe");
+  goalManager.markUsageLimited("429");
+  check("usage_limited 放行 get_goal", goalManager.shouldBlockTool("get_goal") === false);
+  check("usage_limited 放行 update_goal", goalManager.shouldBlockTool("update_goal") === false);
+  check("usage_limited 阻塞 bash", goalManager.shouldBlockTool("bash") === true);
+}
+
 reset();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
