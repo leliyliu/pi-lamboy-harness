@@ -148,7 +148,15 @@ repo (packages/core/attention)                 personal (notify 扩展)
 | 测试 / 类型 | `npm test` → all suites passed；`npm run typecheck` → 退出码 0 | 命令输出 |
 | home 旧文件 | `~/.pi/agent/extensions/notify.ts` → `notify.ts.bak-20261022-v6` | `ls` 输出 |
 
-**待人工验收（需重启 pi）**：按 §6 表格逐项确认浮窗文案/音色/静默边界。
+**人工验收：通过（2026-10-22 23:30，运行中的 TUI 会话 pid 48964）**。按 §6 表格逐项确认结果：
+
+| 步骤 | 结果 | 证据 |
+|---|---|---|
+| agent 调 `ask_user_question` | ✅ 浮窗 + Ping，用户当场确认「浮窗 + 声音都出现了」 | `/tmp/pi-notify.log: [48964] attention kind=ask … → pinotify spawned kind=info → afplay Ping exit=0`（15:30:36Z） |
+| 破坏性 bash（`echo 'git reset --hard …'`，仅打印） | ✅ 浮窗 + Submarine，且在审批面板出现同时弹出；选 Allow once 后命令执行 | 同上，`attention kind=approval … → pinotify spawned kind=info → afplay Submarine exit=0`（15:31:12Z） |
+| 普通 turn 结束 | ✅ 仍只有「✅ 完成」，未重复 | `afplay Glass exit=0`（settled 分支） |
+| 计划审批 | 未在 TUI 手工复现；由 `tests/attention.test.mjs` §9 + E2E §9.1 覆盖同一通道 | 同 ask/approval 通道 |
+| `PI_NOTIFY=0` / headless | 由单元测试覆盖（`DISABLED` 早退、`ctx.mode !== "tui"` 静默） | `tests/attention.test.mjs` mode gate 三条 |
 
 ### 9.1 真实进程 E2E（2026-10-22 23:26，macOS）
 
