@@ -10,7 +10,10 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerAskUserQuestion } from "../ask/index";
+import { setAttentionBus } from "../packages/core/attention/index.ts";
 
 export default function (pi: ExtensionAPI) {
+  // Bind the cross-extension attention bus used before ask_user_question's dialog.
+  setAttentionBus(pi.events);
   registerAskUserQuestion(pi);
 }

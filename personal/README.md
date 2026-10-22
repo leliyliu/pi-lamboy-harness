@@ -11,7 +11,8 @@
 |---|---|---|---|
 | **image2.ts** | extension（354 行） | 注册 `generate_image` 工具：调用京东云 gpt-image2（OpenAI Images API 兼容），生成 1–4 张图片保存到本地并以 ImageContent 插入对话。任何模型画图时都可调用 | `~/.pi/agent/extensions/image2.ts`（2026-08-20） |
 | **joyspace-md-import** | skill（187 行 SKILL.md + 引用 + 脚本） | 把本地 Markdown（含图片/表格/代码块）经 Playwright 驱动 Slate 编辑器写入京东 JoySpace 在线文档；含 SSO 登录、图片上传、SVG 转 PNG 预处理 | `~/.pi/agent/skills/joyspace-md-import/` |
-| **notify/pinotify.swift** | 构建脚本 + Swift 源码（~200 行） | 屏幕右上角非激活浮窗：不经 UNUserNotificationCenter，绕开被企业策略封锁的通知授权；`.nonactivatingPanel` 不抢焦点、鼠标穿透、6s 自动淡出、多实例槽位错开。配合全局 `~/.pi/agent/extensions/notify.ts` 在 agent 结束时提醒 | 新建（2026-10-22） |
+| **notify/pinotify.swift** | 构建脚本 + Swift 源码（~200 行） | 屏幕右上角非激活浮窗：不经 UNUserNotificationCenter，绕开被企业策略封锁的通知授权；`.nonactivatingPanel` 不抢焦点、鼠标穿透、6s 自动淡出、多实例槽位错开。配合 `personal/extensions/notify.ts` 在 turn 结束与「需要用户介入」时提醒 | 新建（2026-10-22） |
+| **extensions/notify.ts** | extension（v6） | 统一提醒宿主：`agent_settled`（完成/出错）+ 接收 repo `packages/core/attention` 的三种「等你介入」事件——提问（Ping）、权限授权（Submarine）、计划审批（Hero）。通道优先级 pinotify 浮窗 → osascript 对话框 → 仅声音，全程 fail-open；`PI_NOTIFY=0` 全禁用 | `~/.pi/agent/extensions/notify.ts`（2026-10-22 迁入） |
 
 ### 构建 pinotify
 
@@ -21,7 +22,7 @@
 ~/.pi/agent/bin/pinotify --title pi --body "自测" --kind success --duration 6
 ```
 
-> 注意：`personal/notify/` **不在** `pi.extensions` / `pi.skills` 扫描范围内，不会被 pi 当作扩展加载——它是 `~/.pi/agent/extensions/notify.ts` 的配套二进制源码。背景与四轮通道实验见 `plans/2026-10-12-通知链路诊断报告.md`。
+> 注意：`personal/notify/` **不在** `pi.extensions` / `pi.skills` 扫描范围内，不会被 pi 当作扩展加载——它是 `personal/extensions/notify.ts` 的配套二进制源码。背景与四轮通道实验见 `plans/2026-10-12-通知链路诊断报告.md`，提醒矩阵与三类介入事件见 `plans/2026-10-22-need-input-notifications.md`。
 
 ## 选装方式
 
@@ -38,6 +39,8 @@ pi install /Users/liulian.leliy/github-projects/pi-lamboy-harness/personal
 
 ```bash
 mv ~/.pi/agent/extensions/image2.ts ~/.pi/agent/extensions/image2.ts.bak
+# notify.ts v6 已迁入本包；home 旧副本必须改名，否则双注册会弹两次
+mv ~/.pi/agent/extensions/notify.ts ~/.pi/agent/extensions/notify.ts.bak-$(date +%Y%m%d)
 mv ~/.pi/agent/skills/joyspace-md-import ~/.pi/agent/skills/joyspace-md-import.bak
 pi install /Users/liulian.leliy/github-projects/pi-lamboy-harness/personal
 # 确认工作正常后删除 .bak
@@ -71,6 +74,17 @@ pi remove /Users/liulian.leliy/github-projects/pi-lamboy-harness/personal
 ```json
 { "baseUrl": "...", "apiKey": "...", "model": "gpt-image-2", "proxy": "http://127.0.0.1:17893" }
 ```
+
+### notify.ts
+
+| 环境变量 | 说明 | 默认 |
+|---|---|---|
+| `PI_NOTIFY` | `0` = 完全禁用提醒 | 启用 |
+| `PI_NOTIFY_DEBUG` | 调试日志路径 | `/tmp/pi-notify.log` |
+| `PINOTIFY_BIN` | 浮窗二进制路径 | `~/.pi/agent/bin/pinotify` |
+| `PI_NOTIFY_SOUND_ASK` / `_APPROVAL` / `_PLAN` | 三类介入事件的音色 | `Ping` / `Submarine` / `Hero` |
+
+> 提醒只在 `ctx.mode === "tui"` 时触发；headless/RPC 与管道调用静默。
 
 ### joyspace-md-import
 

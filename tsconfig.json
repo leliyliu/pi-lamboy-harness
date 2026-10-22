@@ -20,6 +20,7 @@
     "pause/**/*.ts",
     "handoff/**/*.ts",
     "perf/**/*.ts",
-    "latex/**/*.ts"
+    "latex/**/*.ts",
+    "personal/extensions/notify.ts"
   ]
 }

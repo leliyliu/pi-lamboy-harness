@@ -12,8 +12,12 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { planManager } from "../packages/core/plan";
+import { setAttentionBus } from "../packages/core/attention/index.ts";
 
 export default function (pi: ExtensionAPI) {
+  // Bind the cross-extension attention bus used by exit_plan_mode's review panel.
+  setAttentionBus(pi.events);
+
   // Plan state is managed per-session via file in session directory
   // (see packages/core/plan/commands.ts). Persist on every change so
   // session restore (below) can pick it up.

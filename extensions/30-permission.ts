@@ -16,8 +16,12 @@ import { permissionManager, approvalViaRpcUi } from "../packages/core/permission
 import { registerPermissionCommands } from "../packages/core/permission/commands";
 import { showQuestionDialog } from "../ask/index";
 import { approvalTitleFor } from "../packages/core/ask/types";
+import { setAttentionBus } from "../packages/core/attention/index.ts";
 
 export default function (pi: ExtensionAPI) {
+  // Bind the cross-extension attention bus used before an approval prompt.
+  setAttentionBus(pi.events);
+
   // ── Permission mode persistence ──
   permissionManager.setPersistence((mode) => {
     try { pi.appendEntry("lamboy_permission", { mode }); } catch { /* stale ctx */ }

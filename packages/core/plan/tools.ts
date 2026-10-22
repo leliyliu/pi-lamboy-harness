@@ -4,6 +4,7 @@
 
 import type { PlanManager } from "./index.ts";
 import { permissionManager } from "../permission/index.ts";
+import { emitAttention } from "../attention/index.ts";
 import * as fs from "node:fs";
 
 /**
@@ -109,6 +110,15 @@ export function registerPlanTools(pi: any, planManager: PlanManager): void {
       const clearPlanBadge = () => {
         try { ctx.ui.setStatus("plan-mode", undefined); } catch { /* ok */ }
       };
+      // Surface the (possibly long) human review outside the terminal. Only
+      // the manual-review paths call this — auto mode returns before any
+      // panel opens, so it must not notify either.
+      const notifyPlanReview = () => emitAttention({
+        kind: "plan",
+        title: "📋 计划待审批",
+        body: plan.path || "plan",
+        mode: ctx?.mode,
+      });
       // Review cancelled / timed out (choice undefined/null): this is NOT a
       // Revise vote — but the plan must be preserved and plan mode stays
       // active so the user is not trapped and nothing is lost.
@@ -167,6 +177,7 @@ export function registerPlanTools(pi: any, planManager: PlanManager): void {
         const altLabels = validAlternatives.map((a) => a.label);
         const allOptions = [...altLabels, "Approve", "Reject", "Revise"];
 
+        notifyPlanReview();
         // Loop: select → revise input (Esc/empty → back to select)
         while (true) {
           const choice = await ctx.ui.select(
@@ -225,6 +236,7 @@ export function registerPlanTools(pi: any, planManager: PlanManager): void {
       // No alternatives: simple Approve/Reject/Revise
       const options = ["Approve", "Reject", "Revise"];
 
+      notifyPlanReview();
       // Loop: select → revise input (Esc/empty → back to select)
       while (true) {
         const choice = await ctx.ui.select(

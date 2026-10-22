@@ -27,6 +27,7 @@ import {
   type AnsweredQuestion,
   type QuestionSpec,
 } from "../packages/core/ask/types";
+import { emitAttention } from "../packages/core/attention/index.ts";
 import { QuestionDialogComponent, type QuestionsDialogResult } from "./dialog";
 
 /** Run the tabbed dialog over all questions; undefined = no UI available. */
@@ -171,6 +172,16 @@ export function registerAskUserQuestion(pi: any): void {
       if (!ctx?.hasUI) {
         return { content: [{ type: "text", text: questionsAsText(questions) }] };
       }
+
+      // The user is about to be blocked on this dialog: surface it outside the
+      // terminal. No-op unless a notifier extension registered one; mode gating
+      // keeps headless/RPC hosts silent.
+      emitAttention({
+        kind: "ask",
+        title: "❓ 需要你回答",
+        body: questions[0]?.question ?? "",
+        mode: ctx?.mode,
+      });
 
       const result = await showQuestionsDialog(ctx, questions);
       if (!result) {
