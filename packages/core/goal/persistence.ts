@@ -23,6 +23,10 @@ export function goalToEntryData(goal: GoalSnapshot | null): GoalEntryData | null
     wallClockResumedAt: goal.wallClockResumedAt,
     budgetLimits: goal.budgetLimits,
     terminalReason: goal.terminalReason,
+    // B3 (spec §3): top-ups used via /goal resume must survive reload.
+    topUps: goal.topUps,
+    // B4 (spec §3): auto-extend flag survives reload.
+    autoExtend: goal.autoExtend,
   };
 }
 
@@ -43,6 +47,8 @@ export function goalFromEntryData(data: GoalEntryData): GoalSnapshot {
     wallClockResumedAt: data.wallClockResumedAt,
     budgetLimits: data.budgetLimits,
     terminalReason: data.terminalReason,
+    topUps: data.topUps,
+    autoExtend: data.autoExtend,
   };
 }
 

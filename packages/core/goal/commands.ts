@@ -40,9 +40,26 @@ export function registerGoalCommands(pi: any, goalManager: GoalManager): void {
           break;
 
         case "resume":
-          const resumed = goalManager.resume("user");
-          if (resumed) {
-            ctx.ui.notify(`Goal resumed: ${resumed.objective}`, "info");
+          // B3 (spec §3): resume via the user entry point auto-tops-up an
+          // over-budget goal — the bare resume() path re-entered budget_limited
+          // on the very next recordTurn (the resume trap). LLM-side
+          // update_goal(active) stays excluded (user-entry-point only).
+          const r = goalManager.resumeWithTopUp("user");
+          if (r?.goal) {
+            if (r.kind === "topped-up") {
+              ctx.ui.notify(
+                `Goal resumed. Budget auto-topped-up to ${r.newBudget} tokens (top-up #${r.topUps} of max ${goalManager.topUpMaxForDisplay() ?? "∞"}). Adjust with /goal budget <n> tokens.`,
+                "info",
+              );
+            } else if (r.kind === "limit-reached") {
+              const g = goalManager.getGoal();
+              ctx.ui.notify(
+                `Goal resumed (budget unchanged: auto top-up limit reached — ${g?.budgetLimits?.tokenBudget ?? "?"} tokens). Raise explicitly with /goal budget <n> tokens to keep going.`,
+                "warning",
+              );
+            } else {
+              ctx.ui.notify(`Goal resumed: ${r.goal.objective}`, "info");
+            }
           } else {
             ctx.ui.notify("No paused/blocked goal to resume.", "error");
           }

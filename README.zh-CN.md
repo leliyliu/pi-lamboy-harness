@@ -56,7 +56,10 @@ pi                                                      # 重启 pi，然后试�
 - **Active Guard** — 已有 active 目标时 `create_goal` 拒绝静默覆盖，需 `replace=true` 或 `/goal replace`
 - **Blocked 3 轮阈值** — 同一原因连续 3 次 block 才真正进入 blocked
 - **完成判据门禁** — 声明了 completionCriterion 时，需在同一次 `update_goal` 调用中传 `verified=true` 才能 complete（已写入工具描述）
-- **Budget 三重检测** — tokenBudget + turnBudget + wallClockBudgetMs，`set_goal_budget` 支持 turns/tokens/ms/s/min/hours
+- **Budget 三重检测** — tokenBudget + turnBudget + wallClockBudgetMs，`set_goal_budget` 支持 turns/tokens/ms/s/min/hours；token 预算策略（模型路径强制）：未传默认 800k，低于 500k 下限自动抬升（env `PI_LAMBOY_GOAL_TOKEN_BUDGET` / `PI_LAMBOY_GOAL_MIN_TOKEN_BUDGET` 可调，设 0 关闭）
+- **委派加速** — active goal 每轮注入预授权委派指引（env `PI_LAMBOY_GOAL_DELEGATION=0` 关闭）；委派 subagent child tokens 经 `toolResults[].usage` 计入 goal 预算（turnsUsed 不变）
+- **预算档位** — ≥80% 注入“优先委派”、≥95% 注入“立即落盘 handoff briefing”（env `PI_LAMBOY_GOAL_BUDGET_WARN` / `_CRIT`，0 关闭）
+- **耗尽续接** — budget_limited wrap-up 强制先写 handoff briefing（白名单 get_goal/handoff/update_goal，单源常量，tool_call 硬拦截执行，env `PI_LAMBOY_GOAL_TOOL_GATE=0` 关闭）；`/goal resume` 对超限 goal 自动 top-up：max(tokensUsed+500k, ceil(tokensUsed×1.25/50k)×50k)，默认上限 3 次（env `PI_LAMBOY_GOAL_TOPUP_MAX`，0 不限）；`create_goal(autoExtend=true)`（默认关）耗尽时自动续期 +500k（env `PI_LAMBOY_GOAL_EXTEND_STEP`）而非 budget_limited
 - **Goal Queue** — FIFO + high/normal 优先级 + auto-switch + prioritize/drop/skip
 - **持久化** — appendEntry + session_start 恢复；计数按 goalId **单调合并**（max），过期 entry 不会把轮次/token 拉回过去；`clear()` 写入墓碑 entry，完成的目标不会复活
 - **Context 注入** — `<untrusted_objective>` 标签注入 system prompt

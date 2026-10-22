@@ -3,7 +3,7 @@
 // ============================================================
 
 import type { GoalSnapshot, GoalStatus, GoalActor, GoalBudgetLimits } from "./types.ts";
-import { goalState, setCurrentGoal, GOAL_ENTRY_TYPE } from "./types.ts";
+import { goalState, setCurrentGoal, GOAL_ENTRY_TYPE, GOAL_LIMITED_ALLOWED_TOOLS, GOAL_LIMITED_ALLOWED_TOOLS_LABEL } from "./types.ts";
 import { computeBudgetReport, budgetBandGuidance, liveWallClockMs } from "./budget.ts";
 import { goalToEntryData, goalFromEntryData, reconstructGoalFromEntries } from "./persistence.ts";
 import { registerGoalTools } from "./tools.ts";
@@ -67,6 +67,9 @@ export class GoalManager {
    * P0 (1): active guard — refuses to create when an active goal already exists,
    * unless `replace=true` is passed (caller explicitly acknowledges the overwrite).
    * Throws a descriptive Error so tool/command layers can surface it to the model/user.
+   * B4 (spec §3): autoExtend (create_goal param, default false) — when true,
+   * crossing the token budget steps it up instead of entering budget_limited
+   * (same top-up cap as B3).
    */
   createGoal(
     objective: string,
@@ -74,6 +77,7 @@ export class GoalManager {
     budgetLimits?: GoalBudgetLimits,
     actor: GoalActor = "user",
     replace: boolean = false,
+    autoExtend: boolean = false,
   ): GoalSnapshot {
     // P0 (1): active guard
     if (goalState.current && goalState.current.status === "active" && !replace) {
@@ -91,6 +95,7 @@ export class GoalManager {
       wallClockMs: 0,
       wallClockResumedAt: Date.now(),
       budgetLimits,
+      ...(autoExtend ? { autoExtend: true } : {}),
     };
     setCurrentGoal(goal);
     this.persist();
@@ -323,8 +328,12 @@ export class GoalManager {
    * Record a turn / token usage.
    * Returns `{ crossedBudget }` if this turn pushed over the budget.
    * Auto-blocks the goal when budget is exceeded.
+   * B4 (spec §3): when the goal was created with autoExtend=true, a token
+   * crossing steps the budget up by the extend step instead of blocking
+   * (same cap as B3); `autoExtendedTo` then carries the new budget for the
+   * caller's notify, and crossedBudget is false (the goal didn't stop).
    */
-  recordTurn(tokens: number, actor: GoalActor = "runtime"): { crossedBudget: boolean } {
+  recordTurn(tokens: number, actor: GoalActor = "runtime"): { crossedBudget: boolean; autoExtendedTo?: number } {
     const g = goalState.current;
     if (!g || g.status !== "active") return { crossedBudget: false };
 
@@ -343,11 +352,34 @@ export class GoalManager {
 
     const crossed = crossedTokens || crossedTurns || crossedWallClock;
     let newStatus: GoalStatus = g.status;
-    const terminalReason = crossed ? "Budget exceeded" : g.terminalReason;
+    let terminalReason = crossed ? "Budget exceeded" : g.terminalReason;
+    let autoExtendedTo: number | undefined;
+    let newLimits = limits;
+    let topUps = g.topUps;
 
     if (crossed) {
-      // Distinguish budget_limited (tokenBudget) from blocked (other budgets)
-      newStatus = crossedTokens ? "budget_limited" : "blocked";
+      const max = this.topUpMax();
+      const underCap = max === 0 || (g.topUps ?? 0) < max;
+      // B4: a token crossing on an autoExtend goal is excused by extending the
+      // budget — but only when nothing else stops the goal. Finding 2 fix
+      // (review 2026-10-19): decide the stop FIRST; a simultaneous
+      // turn/wall-clock crossing must not consume a top-up (the goal stops
+      // anyway — extending would be dead weight, and would misreport a
+      // token-crossing goal as "blocked" instead of budget_limited).
+      const tokenExcusable = crossedTokens && g.autoExtend === true && underCap;
+      const stillCrossed = (crossedTurns || crossedWallClock) || (crossedTokens && !tokenExcusable);
+      if (stillCrossed) {
+        // Distinguish budget_limited (tokenBudget) from blocked (other budgets)
+        newStatus = crossedTokens && !tokenExcusable ? "budget_limited" : "blocked";
+        terminalReason = "Budget exceeded";
+      } else if (tokenExcusable) {
+        // Pure token crossing on an autoExtend goal: extend and keep running.
+        const step = this.extendStep();
+        autoExtendedTo = (limits.tokenBudget ?? 0) + step;
+        newLimits = { ...limits, tokenBudget: autoExtendedTo };
+        topUps = (g.topUps ?? 0) + 1;
+        terminalReason = g.terminalReason;
+      }
     }
 
     setCurrentGoal(cloneSnapshot(g, this.withActor({
@@ -357,24 +389,75 @@ export class GoalManager {
       wallClockResumedAt: now, // Reset wall clock interval
       status: newStatus,
       terminalReason,
+      // Nit 8 (review): write budgetLimits only when autoExtend changed it —
+      // unconditional write persisted `budgetLimits: {}` for limit-less goals.
+      ...(autoExtendedTo !== undefined ? { budgetLimits: newLimits } : {}),
+      ...(topUps !== g.topUps ? { topUps } : {}),
     }, actor)));
     this.persist();
-    return { crossedBudget: crossed };
+    // crossedBudget = the goal actually stopped (autoExtend alone doesn't stop).
+    const stopped = newStatus !== "active";
+    return { crossedBudget: stopped, autoExtendedTo };
   }
 
   /**
    * Record token usage without incrementing turns.
+   * A2 (spec §2): used for delegated subagent child tokens — their usage
+   * lands in toolResult.usage, never in the parent assistant msg.usage.
+   * Checks the token budget like recordTurn so delegated tokens alone can
+   * also flip the goal to budget_limited (A2c: child-first accumulation must
+   * not skip the crossing check). B4: autoExtend goals step the budget up
+   * here too. Turns/wall-clock budgets can't newly cross here — neither
+   * counter moves in this path.
+   * Silent persist (no UI update); the caller refreshes the badge.
    */
-  recordTokenUsage(delta: number): void {
+  recordTokenUsage(delta: number): { crossedBudget: boolean; autoExtendedTo?: number } {
     const g = goalState.current;
-    if (!g || g.status !== "active") return;
+    // Finding 1 fix (review 2026-10-19): also accumulate while budget_limited —
+    // the same turn's parent msg may have just crossed the budget (turn_end
+    // processes msg.usage first), and silently dropping that turn's delegated
+    // tokens undercounts the goal. We only skip state flips/extension when
+    // not active (no double-transition out of a terminal-ish state).
+    if (!g || (g.status !== "active" && g.status !== "budget_limited")) {
+      return { crossedBudget: false };
+    }
+    const accumulating = g.status === "active";
 
     const newTokens = g.tokensUsed + Math.max(0, delta);
+    const limits = g.budgetLimits ?? {};
+    const crossedTokens = limits.tokenBudget !== undefined && limits.tokenBudget > 0 && newTokens >= limits.tokenBudget;
+
+    let autoExtendedTo: number | undefined;
+    let newLimits = limits;
+    let topUps = g.topUps;
+    let status: GoalStatus | undefined;
+    let terminalReason: string | undefined;
+
+    if (accumulating && crossedTokens) {
+      const max = this.topUpMax();
+      const underCap = max === 0 || (g.topUps ?? 0) < max;
+      if (g.autoExtend && underCap) {
+        const step = this.extendStep();
+        autoExtendedTo = (limits.tokenBudget ?? 0) + step;
+        newLimits = { ...limits, tokenBudget: autoExtendedTo };
+        topUps = (g.topUps ?? 0) + 1;
+      } else {
+        status = "budget_limited";
+        terminalReason = "Budget exceeded";
+      }
+    }
+
     setCurrentGoal(cloneSnapshot(g, {
       tokensUsed: newTokens,
+      ...(status !== undefined ? { status, terminalReason } : {}),
+      // Nit 8 (review): budgetLimits only when an extension changed it.
+      ...(autoExtendedTo !== undefined ? { budgetLimits: newLimits } : {}),
+      ...(topUps !== g.topUps ? { topUps } : {}),
     }));
-    // Silent persist (no UI update)
     if (this.persistFn) this.persistFn(goalState.current);
+    // crossedBudget = this call actually flipped/kept the goal stopped by
+    // tokens (not: merely accumulated over an already-limited budget).
+    return { crossedBudget: status === "budget_limited", autoExtendedTo };
   }
 
   /**
@@ -473,6 +556,114 @@ export class GoalManager {
   }
 
   /**
+   * B3 (spec §3): top-up env ceiling. 0 = unlimited. Default 3.
+   */
+  private topUpMax(): number {
+    const raw = process.env.PI_LAMBOY_GOAL_TOPUP_MAX;
+    const n = Number(raw);
+    return raw !== undefined && Number.isFinite(n) && n >= 0 ? n : 3;
+  }
+
+  /**
+   * B3/B4 (spec §3): auto top-up step (B4 extension amount). Default 500000.
+   */
+  private extendStep(): number {
+    const raw = process.env.PI_LAMBOY_GOAL_EXTEND_STEP;
+    const n = Number(raw);
+    return raw !== undefined && Number.isFinite(n) && n > 0 ? n : 500000;
+  }
+
+  /** B3: public read-only accessor for UI copy (/goal resume notify). */
+  topUpMaxForDisplay(): number | null {
+    const max = this.topUpMax();
+    return max === 0 ? null : max;
+  }
+
+  /**
+   * B3 (spec §3): resume via the USER entry point (/goal resume), with
+   * automatic budget top-up for the resume trap.
+   *
+   * The trap: resume() only flips status; tokensUsed is monotonic and the
+   * tokenBudget is unchanged, so the very next recordTurn() re-enters
+   * budget_limited (crossedTokens: newTokens >= tokenBudget). The user's
+   * "resume" looked like a no-op.
+   *
+   * Policy (D3): when resuming an over-budget budget_limited goal, raise
+   * tokenBudget to max(tokensUsed + 500k, ceil(tokensUsed * 1.25 / 50k) * 50k)
+   * — at least another 500k, or 25% headroom, whichever is larger, 50k-aligned.
+   * Capped at PI_LAMBOY_GOAL_TOPUP_MAX top-ups (default 3, 0 = unlimited);
+   * at the cap the resume still proceeds (explicit user decision) but the
+   * budget is left untouched (kind="limit-reached").
+   *
+   * Non-budget states (paused/blocked/usage_limited/under-budget) resume as
+   * before (kind="resumed"). The MODEL path (update_goal status="active")
+   * remains excluded — LLM self-recovery for budget_limited stays a no-op
+   * (10b semantics preserved; auto-renewal is user-entry-point only).
+   */
+  resumeWithTopUp(
+    actor: GoalActor = "user",
+  ): { kind: "resumed" | "topped-up" | "limit-reached" | "none"; goal: GoalSnapshot | null; newBudget?: number; topUps?: number } | null {
+    const g = goalState.current;
+    if (!g || g.status === "complete") return { kind: "none", goal: null };
+
+    const overBudget =
+      g.status === "budget_limited" &&
+      g.budgetLimits?.tokenBudget !== undefined &&
+      g.tokensUsed >= g.budgetLimits.tokenBudget;
+
+    if (!overBudget) {
+      const resumed = this.resume(actor);
+      return resumed ? { kind: "resumed", goal: resumed } : { kind: "none", goal: null };
+    }
+
+    const max = this.topUpMax();
+    const usedTopUps = g.topUps ?? 0;
+    if (max > 0 && usedTopUps >= max) {
+      const resumed = this.resume(actor);
+      return resumed ? { kind: "limit-reached", goal: resumed } : { kind: "none", goal: null };
+    }
+
+    const newBudget = Math.max(
+      g.tokensUsed + 500000,
+      Math.ceil((g.tokensUsed * 1.25) / 50000) * 50000,
+    );
+    this.setBudgetLimits({ tokenBudget: newBudget }, actor);
+    const resumed = this.resume(actor);
+    if (!resumed) return { kind: "none", goal: null };
+    const updated = cloneSnapshot(resumed, this.withActor({ topUps: usedTopUps + 1 }, actor));
+    setCurrentGoal(updated);
+    this.persist();
+    return { kind: "topped-up", goal: updated, newBudget, topUps: usedTopUps + 1 };
+  }
+
+  /**
+   * B1 (spec §3): wrap-up for budget_limited — the exhausted turn MUST first
+   * park a handoff briefing (the handoff tool is whitelisted in
+   * shouldBlockTool and the tool_call gate), so the user can continue via
+   * /handoff in one keystroke. The draft flow already exists in 85-handoff.ts
+   * (HANDOFF_DRAFT_TYPE entry → turn_end editor prefill → /handoff review).
+   *
+   * Wording style: explicit whitelist + immediate actionable instruction — the
+   * pattern validated by the usage_limited fix (quant02 2026-09-16); the old
+   * "You MUST NOT use any tools" blanket ban also suppressed the handoff tool,
+   * which is exactly why an exhausted goal could not hand off.
+   */
+  private buildBudgetLimitedWrapUp(statusLabel: string): string {
+    return [
+      `⚠️ ${statusLabel}. Allowed tools right now: ${GOAL_LIMITED_ALLOWED_TOOLS_LABEL} (nothing else).`,
+      ``,
+      `1. Call the handoff tool NOW with a complete self-contained briefing:`,
+      `   - context & decisions so far`,
+      `   - files involved (paths)`,
+      `   - the goal's objective & completion criterion, remaining work, suggested next budget`,
+      `   The briefing is the only thing the next session sees.`,
+      `2. Then give a 2-3 line wrap-up. Do NOT continue goal work inline.`,
+      ``,
+      `The user continues via /handoff (one keystroke) — the draft you write now is what they get.`,
+    ].join("\n");
+  }
+
+  /**
    * Build wrap-up instruction for budget_limited/usage_limited goals.
    *
    * usage_limited (provider 429) is a temporary external limit. The window
@@ -485,9 +676,9 @@ export class GoalManager {
    * goal for 6+ rounds even when the user pasted the exact command
    * (quant02 incident, session 2026-09-16T02-40-50).
    *
-   * budget_limited (user tokenBudget) is reserved for user decision:
-   * tokensUsed is monotonic, so an LLM auto-recover would re-limit
-   * immediately and burn tokens. Wait for set_goal_budget / /goal resume.
+   * budget_limited (user tokenBudget) now instructs the model to write the
+   * handoff briefing first (B1, spec §3) — renewal stays reserved for the
+   * user: /goal resume auto-tops-up (B3), set_goal_budget raises explicitly.
    */
   buildWrapUpInjection(): string | undefined {
     const g = goalState.current;
@@ -507,16 +698,7 @@ export class GoalManager {
         `Do NOT call create_goal. Do NOT write a wrap-up summary — the goal is paused, not ended.`,
       ].join("\n");
     }
-    return [
-      `⚠️ ${statusLabel}. You MUST NOT use any tools now.`,
-      ``,
-      `Provide a brief wrap-up only:`,
-      `- Progress made so far`,
-      `- Results achieved`,
-      `- Blockers encountered`,
-      ``,
-      `Do NOT attempt to continue the goal. Do NOT call create_goal or update_goal. The token budget is a user-set limit — wait for the user to raise it (set_goal_budget) or resume manually (/goal resume).`,
-    ].join("\n");
+    return this.buildBudgetLimitedWrapUp(statusLabel);
   }
 
   /**
@@ -532,10 +714,14 @@ export class GoalManager {
       return true;
     }
 
-    // Block all tools when budget/usage limited
+    // Block all tools when budget/usage limited. B2 (spec §3): the whitelist
+    // now includes `handoff` — the exhausted turn must still be able to park
+    // the handoff briefing (B1). Enforced by the tool_call gate in
+    // extensions/40-goal.ts (this used to be defined but never wired).
+    // Nit 5 (review 2026-10-19): single source GOAL_LIMITED_ALLOWED_TOOLS in
+    // types.ts — shared with the wrap-up text and the gate reason.
     if (g.status !== "budget_limited" && g.status !== "usage_limited") return false;
-    const allowedTools = ["get_goal", "update_goal"];
-    if (allowedTools.includes(toolName)) return false;
+    if (GOAL_LIMITED_ALLOWED_TOOLS.includes(toolName)) return false;
     return true;
   }
 
@@ -703,6 +889,24 @@ export class GoalManager {
     }
   }
 
+  /**
+   * A1 (spec §2): pre-authorized delegation guidance for active goals.
+   * The subagent tool's own (pinned) description says "only when the operator
+   * asked" — a goal created by the user IS that operator authorization, so
+   * the goal injection carries it every turn. Self-contained wording (no
+   * reference to AGENTS.md). env PI_LAMBOY_GOAL_DELEGATION=0 disables.
+   */
+  private buildDelegationGuidance(): string | undefined {
+    if (process.env.PI_LAMBOY_GOAL_DELEGATION === "0") return undefined;
+    return [
+      `Delegation (pre-authorized for this goal):`,
+      `- Explore unfamiliar code / multi-file review / parallel research → delegate to subagents (scout, reviewer) instead of reading everything inline.`,
+      `- Independent parallel implementation lanes → workflow fan-out (worker lanes), one writer per lane (worktree if concurrent writes).`,
+      `- Trivial single-file edits and orchestration decisions stay inline.`,
+      `- Delegated child tokens are billed to this goal's budget (recorded at turn_end); child context stays out of this session, keeping your input growth slow — delegation is the budget-cheapest way to work.`,
+    ].join("\n");
+  }
+
   /** Build model-facing injection text for <untrusted_objective> block */
   buildInjection(): string | undefined {
     const g = goalState.current;
@@ -717,6 +921,8 @@ export class GoalManager {
         `</untrusted_objective>`,
       ];
       if (g.completionCriterion) parts.push(``, `Completion criterion: ${g.completionCriterion}`);
+      const delegation = this.buildDelegationGuidance();
+      if (delegation) parts.push(``, delegation);
       if (budgetLine) parts.push(``, budgetLine);
       return parts.join("\n");
     }
@@ -805,12 +1011,19 @@ export class GoalManager {
   restoreFromData(data: GoalSnapshot): void {
     const cur = goalState.current;
     if (cur && cur.goalId === data.goalId) {
-      setCurrentGoal({
+      const merged: GoalSnapshot = {
         ...data,
         turnsUsed: Math.max(cur.turnsUsed, data.turnsUsed ?? 0),
         tokensUsed: Math.max(cur.tokensUsed, data.tokensUsed ?? 0),
         wallClockMs: Math.max(cur.wallClockMs, data.wallClockMs ?? 0),
-      });
+      };
+      // B3: topUps is monotonic too — a stale entry must not reset the
+      // user's remaining auto-renewal allowance. Only set when either side
+      // ever recorded one (keeps snapshots without topUps field-clean).
+      if (cur.topUps !== undefined || data.topUps !== undefined) {
+        merged.topUps = Math.max(cur.topUps ?? 0, data.topUps ?? 0);
+      }
+      setCurrentGoal(merged);
       return;
     }
     setCurrentGoal(data);

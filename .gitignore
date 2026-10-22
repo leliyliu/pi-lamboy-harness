@@ -21,3 +21,6 @@ personal/skills/joyspace-md-import/*.png
 *.log
 *.pdf
 !tests/fixtures/**
+
+# joyspace skill: transient PNG staging area for doc uploads
+personal/skills/joyspace-md-import/.tmp-png/

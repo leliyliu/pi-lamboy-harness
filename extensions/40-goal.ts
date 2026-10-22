@@ -9,7 +9,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { goalManager } from "../packages/core/goal/index.ts";
-import { GOAL_ENTRY_TYPE } from "../packages/core/goal/types.ts";
+import { GOAL_ENTRY_TYPE, GOAL_LIMITED_ALLOWED_TOOLS_LABEL } from "../packages/core/goal/types.ts";
 import type { PersistencePort } from "../packages/core/ports";
 
 export default function (pi: ExtensionAPI) {
@@ -120,6 +120,30 @@ export default function (pi: ExtensionAPI) {
   }, 1000);
   goalBadgeTicker.unref?.();
 
+  // ── tool_call: B2 hard gate (spec §3) ──
+  // shouldBlockTool was defined but never wired — the "no tools after budget
+  // exhaustion" contract was prompt-only. Now enforced mechanically, same
+  // pattern as 20-plan.ts:58-66 ({ block: true, reason }). Whitelist
+  // (get_goal/update_goal/handoff) matches the wrap-up injection (B1): the
+  // exhausted turn must still be able to park the handoff briefing.
+  // env PI_LAMBOY_GOAL_TOOL_GATE=0 disables (default on).
+  if (process.env.PI_LAMBOY_GOAL_TOOL_GATE !== "0") {
+    pi.on("tool_call", async (event, ctx) => {
+      const toolName = (event as { toolName?: string }).toolName ?? "";
+      if (goalManager.shouldBlockTool(toolName)) {
+        // Nit 5 (review): reason string shares the single-source whitelist label
+        // from types.ts (GOAL_LIMITED_ALLOWED_TOOLS_LABEL) — no drift with the
+        // wrap-up injection or shouldBlockTool.
+        const reason =
+          `Goal ${goalManager.getGoal()?.status}: only ${GOAL_LIMITED_ALLOWED_TOOLS_LABEL} allowed. ` +
+          `Write the handoff briefing (context, decisions, files, next task) so the user can continue via /handoff.`;
+        try { ctx.ui.notify(reason, "warning"); } catch { /* non-TUI */ }
+        return { block: true, reason };
+      }
+      return undefined;
+    });
+  }
+
   // ── turn_end: record token usage + budget check (pi-codex-goal style) ──
   pi.on("turn_end", (event, _ctx) => {
     const msg = event.message as any;
@@ -142,9 +166,40 @@ export default function (pi: ExtensionAPI) {
     if (msg?.role === "assistant" && msg?.usage) {
       const tokens = (msg.usage.input || 0) + (msg.usage.output || 0);
       if (tokens > 0) {
-        const { crossedBudget } = goalManager.recordTurn(tokens);
+        // B4: autoExtend goals report the stepped-up budget (autoExtendedTo)
+        // instead of crossing (crossedBudget=false — the goal didn't stop).
+        const { crossedBudget, autoExtendedTo } = goalManager.recordTurn(tokens);
         if (crossedBudget) {
           _ctx.ui.notify("Goal budget exceeded — goal blocked.", "warning");
+        } else if (autoExtendedTo !== undefined) {
+          _ctx.ui.notify(`Goal budget auto-extended to ${autoExtendedTo} (autoExtend goal).`, "info");
+        }
+        updateGoalStatusBar(_ctx);
+      }
+    }
+
+    // ── A2 (spec §2): delegate token accounting ──
+    // subagent children run in their own sessions; their usage never enters
+    // the parent assistant msg.usage — pi aggregates it into the parent-side
+    // toolResult.usage (pi-subagents subagent-executor withAggregatedToolUsage;
+    // TurnEndEvent.toolResults, pi types.d.ts:828-835). Bill delegated child
+    // tokens to the goal via recordTokenUsage (no turnsUsed: the turnBudget
+    // keeps its parent-turn semantics). Known limit (documented in spec §7):
+    // async/detached child completion notices don't carry usage upstream yet.
+    const toolResults = (event as { toolResults?: Array<{ toolName?: string; usage?: { input?: number; output?: number } }> }).toolResults;
+    if (Array.isArray(toolResults)) {
+      let delegatedTokens = 0;
+      for (const tr of toolResults) {
+        if (tr?.toolName !== "subagent" || !tr.usage) continue;
+        const t = (tr.usage.input || 0) + (tr.usage.output || 0);
+        if (t > 0) delegatedTokens += t;
+      }
+      if (delegatedTokens > 0) {
+        const { crossedBudget, autoExtendedTo } = goalManager.recordTokenUsage(delegatedTokens);
+        if (crossedBudget) {
+          _ctx.ui.notify("Goal budget exceeded (delegated tokens) — goal blocked.", "warning");
+        } else if (autoExtendedTo !== undefined) {
+          _ctx.ui.notify(`Goal budget auto-extended to ${autoExtendedTo} (delegated tokens, autoExtend goal).`, "info");
         }
         updateGoalStatusBar(_ctx);
       }

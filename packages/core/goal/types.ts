@@ -62,6 +62,12 @@ export interface GoalSnapshot {
   budget?: GoalBudgetReport;
   terminalReason?: string;
   completionSummary?: string;    // preserved after goal completion
+  /** B3 (spec §3): auto top-ups used via /goal resume (user entry point only). */
+  topUps?: number;
+  /** B4 (spec §3): auto-extend the token budget on exhaustion (create_goal
+   *  param, default false). When true, crossing tokenBudget steps the budget
+   *  up instead of entering budget_limited (same top-up cap as B3). */
+  autoExtend?: boolean;
   /** Queue position if goal is part of a queue */
   queueIndex?: number;
 }
@@ -92,6 +98,17 @@ export interface GoalQueue {
 // Entry type for persistence
 export const GOAL_ENTRY_TYPE = "lamboy_goal";
 
+/**
+ * B2 (spec §3): tools always allowed while budget_limited / usage_limited.
+ * Single source shared by the wrap-up text, shouldBlockTool and the
+ * tool_call gate reason (extensions/40-goal.ts) — a drift in any one of
+ * them re-creates the B1 failure mode (the exhausted turn must always be
+ * able to park the handoff briefing). Review nit 5, 2026-10-19.
+ */
+export const GOAL_LIMITED_ALLOWED_TOOLS: readonly string[] = ["get_goal", "handoff", "update_goal"];
+/** Human-readable form for injection/reason strings (same set, in speech order). */
+export const GOAL_LIMITED_ALLOWED_TOOLS_LABEL = "get_goal, handoff, update_goal";
+
 export interface GoalEntryData {
   goalId: string;
   objective: string;
@@ -105,6 +122,10 @@ export interface GoalEntryData {
   wallClockResumedAt?: number;
   budgetLimits?: GoalBudgetLimits;
   terminalReason?: string;
+  /** B3 (spec §3): auto top-ups used via /goal resume. */
+  topUps?: number;
+  /** B4 (spec §3): create_goal autoExtend flag (default false). */
+  autoExtend?: boolean;
 }
 
 // Global state
