@@ -117,6 +117,8 @@ node ~/.pi/agent/skills/joyspace-md-import/scripts/import.js \
 | `export.js` | 导出 JoySpace 文档为 markdown（--url 必需，--out 输出路径） |
 | `inspect.js` | 打印前 N 个节点结构（--n，调试用） |
 | `fix.js` | 修复追加后残留：--remove-imgs N 删头部残留图，--restore-text 恢复首段文本 |
+| `tail-clean.js` | 修复**尾部**残留：删除末尾连续的空 `p` 与 URL 重复的 `img`（覆盖模式清空不彻底时产生），遇正文即停 |
+| `clear-all.js` | **可靠全量清空**：用 `remove_node` 从尾往前删到末 1 个节点（清空后仍保留正确首段文本）。`deleteFragment` 在嵌套 blockquote 页面上会静默失效，此时先用它再导入 |
 | `shot.js` | 全页截图（--out） |
 
 ### 辅助工具：SVG 转 PNG
@@ -175,6 +177,8 @@ node scripts/svg2png.js --batch ./svgs --out ./pngs --scale 2
 | 刷新后内容丢失 | 用了 `children=nodes` 而非 `insertFragment` | 本脚本已用 `insertFragment`，勿改 |
 | 表格未转换 | 用了粘贴而非 insertFragment | 本脚本自建节点，不依赖粘贴解析 |
 | 追加后头部多出残留图片 / 首段被清空 | 图片上传流程的 clearForUpload 非协同赋值可能被服务端保留 | 用 `fix.js --remove-imgs N --restore-text "原文"` 修复；首段为空时页面标题会变 Untitled（标题从首段提取），恢复首段文本后自动复原 |
+| 覆盖写入后末尾多出 N 张重复图片 + 空段落 | 清空未彻底（清空后 `c` 仍 >1），上传流程的图片节点残留在选区外被协同保留 | 用 `node tail-clean.js --url <url>` 删除尾部残留；验证标准是 `typeCount.img` 等于 md 内图片数 |
+| `--clear-only` 报"已清空"但节点数没减（如仍 47 个） | `deleteFragment` 在该页面（嵌套 blockquote / 多图）上静默失效 | 改用 `node clear-all.js --url <url> --text "期望首段文本"`，确认刷新后 `c` 很小再导入；`import.js` 的清空走同一个失效路径 |
 | 图片上传失败 | 剪贴板权限/网络 | 检查 `permissions: ['clipboard-write']`，重试 |
 | `Cannot find module 'playwright'` | 未安装依赖 | `cd scripts && npm install playwright` |
 | npm install 清空了同目录数据 | npm 行为 | **数据文件不要放在 scripts 目录**，脚本已默认用 `.userdata`/`.tmp-png` 子目录隔离 |
