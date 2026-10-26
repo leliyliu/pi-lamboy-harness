@@ -29,6 +29,7 @@ import {
   type HandoffBranchEntry,
 } from "../packages/core/handoff/prompt.ts";
 import { latestHandoffDraft } from "../packages/core/handoff/guard.ts";
+import { goalManager } from "../packages/core/goal/index.ts";
 
 export function registerHandoffCommands(pi: ExtensionAPI): void {
   // ── /handoff [goal] — transfer context to a new focused session ──
@@ -145,13 +146,38 @@ async function reviewAndSwitch(ctx: ExtensionCommandContext, promptText: string)
     return;
   }
 
+  let renewal: { renewed: boolean; newBudget?: number; resumed: boolean } | undefined;
+
   const result = await ctx.newSession({
     parentSession: sessionFile,
+    // 2026-10-26: a handoff creates a NEW session, but the goal lives in this
+    // process-level singleton — without this hook the new session inherits an
+    // exhausted budget_limited goal and every tool stays gated ("handoff did
+    // not extend the budget"). `setup` runs after session_start and before
+    // withSession, and receives the writable new-session SessionManager
+    // (docs/extensions.md: ctx.newSession options), so the extended goal is
+    // persisted into the NEW session. The old pi.appendEntry is invalidated
+    // after session replacement (it throws and 40-goal's try/catch swallows
+    // it), so writing through `sm` is the only reliable path.
+    // Wrapped: a renewal failure must never abort the already-switched
+    // handoff (it would drop the user's edited briefing).
+    setup: async (sm) => {
+      try {
+        renewal = goalManager.renewForHandoff((type, data) => sm.appendCustomEntry(type, data));
+      } catch { /* never break handoff */ }
+    },
     withSession: async (replacementCtx) => {
       // Only the replacement-session ctx is valid here (docs: session
       // replacement lifecycle) — never the captured old one.
       replacementCtx.ui.setEditorText(edited);
-      replacementCtx.ui.notify("Handoff ready — submit when ready.", "info");
+      if (renewal?.renewed) {
+        replacementCtx.ui.notify(
+          `Goal budget extended to ${renewal.newBudget} for this session${renewal.resumed ? " (goal resumed)" : ""}.`,
+          "info",
+        );
+      } else {
+        replacementCtx.ui.notify("Handoff ready — submit when ready.", "info");
+      }
     },
   });
 

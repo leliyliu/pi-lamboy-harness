@@ -14,6 +14,12 @@ import assert from "node:assert/strict";
 
 const { goalManager } = await import("../packages/core/goal/index.ts");
 
+// 2026-10-26: auto-renew is ON by default. This suite pins the B2 gate and
+// A2 delegated-accounting behaviour, whose crossing assertions expect the
+// legacy stop-at-budget_limited path; opt out here. Default auto-renew is
+// covered by tests/goal-autorenew.test.mjs.
+process.env.PI_LAMBOY_GOAL_AUTORENEW = "0";
+
 const mod = await import(`../extensions/40-goal.ts?case=wiring`);
 assert.equal(typeof mod.default, "function", "40-goal.ts must default-export a factory");
 
@@ -24,9 +30,14 @@ function check(name, cond, extra = "") {
 }
 
 const sessionEntries = [];
+const notified = [];
 const ctx = {
   sessionManager: { getEntries: () => sessionEntries },
-  ui: { setStatus: () => {}, notify: () => {}, theme: { fg: (_c, t) => t } },
+  ui: {
+    setStatus: () => {},
+    notify: (msg, level) => notified.push([msg, level]),
+    theme: { fg: (_c, t) => t },
+  },
 };
 
 const handlers = new Map();
@@ -179,6 +190,26 @@ delete process.env.PI_LAMBOY_GOAL_TOOL_GATE;
   check("A2d msg 先跨限 → budget_limited，委派 200 tokens 仍入账（总 2300）",
     g?.status === "budget_limited" && g?.tokensUsed === 2300,
     JSON.stringify({ s: g?.status, t: g?.tokensUsed }));
+}
+// A3 (2026-10-26 auto-renew): with the policy ON, a crossing turn renews the
+// budget and notifies instead of blocking. The file opts out globally (see
+// top), so this case re-enables it explicitly and restores the opt-out.
+{
+  delete process.env.PI_LAMBOY_GOAL_AUTORENEW;
+  goalManager.clear();
+  goalManager.createGoal("auto-renew notify probe", undefined, { tokenBudget: 2000 }, "user");
+  const before = notified.length;
+  await fireTurnEnd({
+    message: { role: "assistant", stopReason: "stop", usage: { input: 2500, output: 0 } },
+  });
+  const g = goalManager.getGoal();
+  check("A3 auto-renew turn_end keeps active + counts renewal",
+    g?.status === "active" && (g?.autoRenewals ?? 0) === 1 && (g?.topUps ?? 0) === 0,
+    JSON.stringify({ s: g?.status, ar: g?.autoRenewals, t: g?.topUps }));
+  check("A3 auto-renew notifies with the new budget",
+    notified.slice(before).some(([m]) => /auto-renew/i.test(m) && /\d/.test(m)),
+    JSON.stringify(notified.slice(before)));
+  process.env.PI_LAMBOY_GOAL_AUTORENEW = "0";
 }
 
 goalManager.clear();

@@ -25,6 +25,8 @@ export function goalToEntryData(goal: GoalSnapshot | null): GoalEntryData | null
     terminalReason: goal.terminalReason,
     // B3 (spec §3): top-ups used via /goal resume must survive reload.
     topUps: goal.topUps,
+    // 2026-10-26: auto-renew count survives reload (monotonic).
+    autoRenewals: goal.autoRenewals,
     // B4 (spec §3): auto-extend flag survives reload.
     autoExtend: goal.autoExtend,
   };
@@ -48,6 +50,7 @@ export function goalFromEntryData(data: GoalEntryData): GoalSnapshot {
     budgetLimits: data.budgetLimits,
     terminalReason: data.terminalReason,
     topUps: data.topUps,
+    autoRenewals: data.autoRenewals,
     autoExtend: data.autoExtend,
   };
 }

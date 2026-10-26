@@ -333,7 +333,7 @@ export class GoalManager {
    * (same cap as B3); `autoExtendedTo` then carries the new budget for the
    * caller's notify, and crossedBudget is false (the goal didn't stop).
    */
-  recordTurn(tokens: number, actor: GoalActor = "runtime"): { crossedBudget: boolean; autoExtendedTo?: number } {
+  recordTurn(tokens: number, actor: GoalActor = "runtime"): { crossedBudget: boolean; autoExtendedTo?: number; autoRenewed?: { budget: number; count: number } } {
     const g = goalState.current;
     if (!g || g.status !== "active") return { crossedBudget: false };
 
@@ -354,12 +354,19 @@ export class GoalManager {
     let newStatus: GoalStatus = g.status;
     let terminalReason = crossed ? "Budget exceeded" : g.terminalReason;
     let autoExtendedTo: number | undefined;
+    let autoRenewed: { budget: number; count: number } | undefined;
     let newLimits = limits;
     let topUps = g.topUps;
+    let autoRenewals = g.autoRenewals ?? 0;
 
     if (crossed) {
       const max = this.topUpMax();
       const underCap = max === 0 || (g.topUps ?? 0) < max;
+      // 2026-10-26 auto-renew: a pure token crossing is excused by the
+      // runtime policy (default +800k, max 10, total cap 8M) before the
+      // goal is allowed to stop. turn/wall-clock crossings are NOT excused.
+      const autoRenewable = crossedTokens && !crossedTurns && !crossedWallClock &&
+        this.canAutoRenew(autoRenewals);
       // B4: a token crossing on an autoExtend goal is excused by extending the
       // budget — but only when nothing else stops the goal. Finding 2 fix
       // (review 2026-10-19): decide the stop FIRST; a simultaneous
@@ -367,7 +374,8 @@ export class GoalManager {
       // anyway — extending would be dead weight, and would misreport a
       // token-crossing goal as "blocked" instead of budget_limited).
       const tokenExcusable = crossedTokens && g.autoExtend === true && underCap;
-      const stillCrossed = (crossedTurns || crossedWallClock) || (crossedTokens && !tokenExcusable);
+      const stillCrossed = (crossedTurns || crossedWallClock) ||
+        (crossedTokens && !tokenExcusable && !autoRenewable);
       if (stillCrossed) {
         // Distinguish budget_limited (tokenBudget) from blocked (other budgets)
         newStatus = crossedTokens && !tokenExcusable ? "budget_limited" : "blocked";
@@ -379,6 +387,19 @@ export class GoalManager {
         newLimits = { ...limits, tokenBudget: autoExtendedTo };
         topUps = (g.topUps ?? 0) + 1;
         terminalReason = g.terminalReason;
+      } else if (autoRenewable) {
+        const next = this.autoRenewBudget(newTokens);
+        if (next !== undefined) {
+          autoExtendedTo = next;
+          newLimits = { ...limits, tokenBudget: next };
+          autoRenewals += 1;
+          autoRenewed = { budget: next, count: autoRenewals };
+          terminalReason = g.terminalReason;
+        } else {
+          // Total budget cap reached — stop exactly like the old path.
+          newStatus = "budget_limited";
+          terminalReason = "Budget exceeded";
+        }
       }
     }
 
@@ -393,11 +414,12 @@ export class GoalManager {
       // unconditional write persisted `budgetLimits: {}` for limit-less goals.
       ...(autoExtendedTo !== undefined ? { budgetLimits: newLimits } : {}),
       ...(topUps !== g.topUps ? { topUps } : {}),
+      ...(autoRenewals !== (g.autoRenewals ?? 0) ? { autoRenewals } : {}),
     }, actor)));
     this.persist();
     // crossedBudget = the goal actually stopped (autoExtend alone doesn't stop).
     const stopped = newStatus !== "active";
-    return { crossedBudget: stopped, autoExtendedTo };
+    return { crossedBudget: stopped, autoExtendedTo, ...(autoRenewed ? { autoRenewed } : {}) };
   }
 
   /**
@@ -411,7 +433,7 @@ export class GoalManager {
    * counter moves in this path.
    * Silent persist (no UI update); the caller refreshes the badge.
    */
-  recordTokenUsage(delta: number): { crossedBudget: boolean; autoExtendedTo?: number } {
+  recordTokenUsage(delta: number): { crossedBudget: boolean; autoExtendedTo?: number; autoRenewed?: { budget: number; count: number } } {
     const g = goalState.current;
     // Finding 1 fix (review 2026-10-19): also accumulate while budget_limited —
     // the same turn's parent msg may have just crossed the budget (turn_end
@@ -428,19 +450,33 @@ export class GoalManager {
     const crossedTokens = limits.tokenBudget !== undefined && limits.tokenBudget > 0 && newTokens >= limits.tokenBudget;
 
     let autoExtendedTo: number | undefined;
+    let autoRenewed: { budget: number; count: number } | undefined;
     let newLimits = limits;
     let topUps = g.topUps;
+    let autoRenewals = g.autoRenewals ?? 0;
     let status: GoalStatus | undefined;
     let terminalReason: string | undefined;
 
     if (accumulating && crossedTokens) {
       const max = this.topUpMax();
       const underCap = max === 0 || (g.topUps ?? 0) < max;
+      const autoRenewable = this.canAutoRenew(autoRenewals);
       if (g.autoExtend && underCap) {
         const step = this.extendStep();
         autoExtendedTo = (limits.tokenBudget ?? 0) + step;
         newLimits = { ...limits, tokenBudget: autoExtendedTo };
         topUps = (g.topUps ?? 0) + 1;
+      } else if (autoRenewable) {
+        const next = this.autoRenewBudget(newTokens);
+        if (next !== undefined) {
+          autoExtendedTo = next;
+          newLimits = { ...limits, tokenBudget: next };
+          autoRenewals += 1;
+          autoRenewed = { budget: next, count: autoRenewals };
+        } else {
+          status = "budget_limited";
+          terminalReason = "Budget exceeded";
+        }
       } else {
         status = "budget_limited";
         terminalReason = "Budget exceeded";
@@ -453,11 +489,12 @@ export class GoalManager {
       // Nit 8 (review): budgetLimits only when an extension changed it.
       ...(autoExtendedTo !== undefined ? { budgetLimits: newLimits } : {}),
       ...(topUps !== g.topUps ? { topUps } : {}),
+      ...(autoRenewals !== (g.autoRenewals ?? 0) ? { autoRenewals } : {}),
     }));
     if (this.persistFn) this.persistFn(goalState.current);
     // crossedBudget = this call actually flipped/kept the goal stopped by
     // tokens (not: merely accumulated over an already-limited budget).
-    return { crossedBudget: status === "budget_limited", autoExtendedTo };
+    return { crossedBudget: status === "budget_limited", autoExtendedTo, ...(autoRenewed ? { autoRenewed } : {}) };
   }
 
   /**
@@ -566,11 +603,65 @@ export class GoalManager {
 
   /**
    * B3/B4 (spec §3): auto top-up step (B4 extension amount). Default 500000.
+   * Kept for the legacy autoExtend path (tests pin this value); the 2026-10-26
+   * auto-renew/handoff policy uses renewStep() instead (default +800k).
    */
   private extendStep(): number {
     const raw = process.env.PI_LAMBOY_GOAL_EXTEND_STEP;
     const n = Number(raw);
     return raw !== undefined && Number.isFinite(n) && n > 0 ? n : 500000;
+  }
+
+  /**
+   * 2026-10-26 auto-renew / handoff step. Default 800000
+   * (PI_LAMBOY_GOAL_RENEW_STEP overrides).
+   */
+  private renewStep(): number {
+    const raw = process.env.PI_LAMBOY_GOAL_RENEW_STEP;
+    const n = Number(raw);
+    return raw !== undefined && Number.isFinite(n) && n > 0 ? n : 800000;
+  }
+
+  // ── 2026-10-26 auto-renew policy ────────────────────────────────────
+  // Runtime renews an exhausted token budget instead of parking the goal.
+  // Decoupled from topUps (which stays the /goal resume budget): auto-renew
+  // must not silently consume the user's manual allowance.
+
+  /** Global switch: PI_LAMBOY_GOAL_AUTORENEW=0 disables (default on). */
+  private autoRenewEnabled(): boolean {
+    return process.env.PI_LAMBOY_GOAL_AUTORENEW !== "0";
+  }
+
+  /** Renewal cap: PI_LAMBOY_GOAL_AUTORENEW_MAX (default 10, 0 = unlimited). */
+  private autoRenewMax(): number {
+    const raw = process.env.PI_LAMBOY_GOAL_AUTORENEW_MAX;
+    const n = Number(raw);
+    return raw !== undefined && Number.isFinite(n) && n >= 0 ? n : 10;
+  }
+
+  /** Hard total cap: PI_LAMBOY_GOAL_MAX_TOKENS (default 8M, 0 = unlimited). */
+  private maxTotalTokens(): number {
+    const raw = process.env.PI_LAMBOY_GOAL_MAX_TOKENS;
+    const n = Number(raw);
+    return raw !== undefined && Number.isFinite(n) && n >= 0 ? n : 8_000_000;
+  }
+
+  private canAutoRenew(renewals: number): boolean {
+    if (!this.autoRenewEnabled()) return false;
+    const max = this.autoRenewMax();
+    return !(max > 0 && renewals >= max);
+  }
+
+  /**
+   * Next token budget after a renewal, or undefined when the hard total cap
+   * makes another extension impossible (used >= cap).
+   */
+  private autoRenewBudget(used: number): number | undefined {
+    const cap = this.maxTotalTokens();
+    if (cap > 0 && used >= cap) return undefined;
+    const step = this.renewStep();
+    const next = Math.max(used + step, Math.ceil((used * 1.25) / 50000) * 50000);
+    return cap > 0 ? Math.min(next, cap) : next;
   }
 
   /** B3: public read-only accessor for UI copy (/goal resume notify). */
@@ -634,6 +725,78 @@ export class GoalManager {
     setCurrentGoal(updated);
     this.persist();
     return { kind: "topped-up", goal: updated, newBudget, topUps: usedTopUps + 1 };
+  }
+
+  /**
+   * 2026-10-26 handoff renewal: `/handoff` switches to a NEW session via
+   * ctx.newSession({ parentSession }), which does NOT copy the old session's
+   * entries. The goal however lives in this process-level singleton, so the
+   * new session would inherit an exhausted goal (budget_limited + tokensUsed
+   * over budget) and every tool would hit the gate — the exact reason a
+   * handoff appeared to "not extend the budget".
+   *
+   * This method (called from handoff/commands.ts inside newSession's `setup`,
+   * which receives the writable new-session SessionManager):
+   *   1. raises tokenBudget to max(used + step, 25% headroom), capped at the
+   *      hard total cap (same policy as auto-renew);
+   *   2. resumes budget_limited → active (handoff is an explicit user action);
+   *   3. ALWAYS writes the goal entry through `append` so the new session owns
+   *      the state (the old pi.appendEntry still targets the disposed session;
+   *      without this, a handoff session that never runs a turn loses the goal
+   *      on process restart).
+   *
+   * Env: PI_LAMBOY_HANDOFF_GOAL_RENEW=0 disables (default on);
+   *      PI_LAMBOY_GOAL_AUTORENEW=0 also disables it (master switch).
+   */
+  renewForHandoff(
+    append?: (type: string, data: unknown) => void,
+  ): { renewed: boolean; newBudget?: number; resumed: boolean } {
+    const g = goalState.current;
+    if (!g || g.status === "complete") return { renewed: false, resumed: false };
+
+    const enabled =
+      process.env.PI_LAMBOY_HANDOFF_GOAL_RENEW !== "0" && this.autoRenewEnabled();
+    const patch: Partial<GoalSnapshot> = {};
+    let newBudget: number | undefined;
+
+    const budget = g.budgetLimits?.tokenBudget;
+    // A turn/wall-clock exhaustion is NOT solved by a handoff (the counters are
+    // cumulative across sessions), so never extend or resume in that case —
+    // the goal would be blocked again on the very next turn. Only token
+    // exhaustion qualifies (review Finding 2).
+    const turnWallExhausted =
+      (g.budgetLimits?.turnBudget !== undefined && g.turnsUsed >= g.budgetLimits.turnBudget) ||
+      (g.budgetLimits?.wallClockBudgetMs !== undefined &&
+        liveWallClockMs(g) >= g.budgetLimits.wallClockBudgetMs);
+    if (enabled && !turnWallExhausted && budget !== undefined && budget > 0) {
+      const next = this.autoRenewBudget(g.tokensUsed);
+      if (next !== undefined && next > budget) {
+        newBudget = next;
+        patch.budgetLimits = { ...g.budgetLimits, tokenBudget: next };
+      }
+    }
+
+    const exhausted = g.status === "budget_limited";
+    // Only resume when the budget actually moved: at the hard total cap a
+    // handoff cannot help, so the goal must stay budget_limited.
+    if (exhausted && enabled && newBudget !== undefined) {
+      patch.status = "active";
+      patch.wallClockResumedAt = Date.now();
+      patch.terminalReason = undefined;
+    }
+
+    const updated = Object.keys(patch).length > 0
+      ? cloneSnapshot(g, this.withActor(patch, "runtime"))
+      : g;
+    if (updated !== g) setCurrentGoal(updated);
+
+    const data = goalToEntryData(updated);
+    if (data) {
+      if (append) append(GOAL_ENTRY_TYPE, data);
+      else if (this.appendEntryFn) this.appendEntryFn(GOAL_ENTRY_TYPE, data);
+    }
+
+    return { renewed: newBudget !== undefined, newBudget, resumed: exhausted && newBudget !== undefined };
   }
 
   /**
@@ -1022,6 +1185,10 @@ export class GoalManager {
       // ever recorded one (keeps snapshots without topUps field-clean).
       if (cur.topUps !== undefined || data.topUps !== undefined) {
         merged.topUps = Math.max(cur.topUps ?? 0, data.topUps ?? 0);
+      }
+      // 2026-10-26: autoRenewals is monotonic for the same reason.
+      if (cur.autoRenewals !== undefined || data.autoRenewals !== undefined) {
+        merged.autoRenewals = Math.max(cur.autoRenewals ?? 0, data.autoRenewals ?? 0);
       }
       setCurrentGoal(merged);
       return;

@@ -64,9 +64,14 @@ export interface GoalSnapshot {
   completionSummary?: string;    // preserved after goal completion
   /** B3 (spec §3): auto top-ups used via /goal resume (user entry point only). */
   topUps?: number;
+  /** 2026-10-26 auto-renew: token-budget extensions applied by the runtime
+   *  when the goal runs out (independent of topUps). */
+  autoRenewals?: number;
   /** B4 (spec §3): auto-extend the token budget on exhaustion (create_goal
    *  param, default false). When true, crossing tokenBudget steps the budget
-   *  up instead of entering budget_limited (same top-up cap as B3). */
+   *  up instead of entering budget_limited (same top-up cap as B3). When the
+   *  top-up cap is exhausted, the runtime auto-renew policy (2026-10-26)
+   *  takes over — see autoRenewals. */
   autoExtend?: boolean;
   /** Queue position if goal is part of a queue */
   queueIndex?: number;
@@ -124,6 +129,8 @@ export interface GoalEntryData {
   terminalReason?: string;
   /** B3 (spec §3): auto top-ups used via /goal resume. */
   topUps?: number;
+  /** 2026-10-26: runtime auto-renewal count (independent of topUps). */
+  autoRenewals?: number;
   /** B4 (spec §3): create_goal autoExtend flag (default false). */
   autoExtend?: boolean;
 }

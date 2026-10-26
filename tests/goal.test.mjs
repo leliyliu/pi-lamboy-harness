@@ -594,9 +594,14 @@ reset();
 }
 
 // ── 17. B3 /goal resume 自动 top-up（修 resume 陷阱） ───────────────────
+// 2026-10-26: auto-renew is ON by default, so this suite (which exercises the
+// manual /goal resume path) must opt out — otherwise recordTurn would renew
+// the budget and the goal would never reach budget_limited.
 const ENV_TOPUP = "PI_LAMBOY_GOAL_TOPUP_MAX";
+const ENV_AUTORENEW = "PI_LAMBOY_GOAL_AUTORENEW";
 const savedTopup = process.env[ENV_TOPUP];
-function topupReset() { reset(); delete process.env[ENV_TOPUP]; }
+const savedAutorenew = process.env[ENV_AUTORENEW];
+function topupReset() { reset(); delete process.env[ENV_TOPUP]; process.env[ENV_AUTORENEW] = "0"; }
 
 topupReset();
 {
@@ -702,6 +707,7 @@ topupReset();
     String(goalManager.getGoal()?.topUps));
 }
 if (savedTopup === undefined) delete process.env[ENV_TOPUP]; else process.env[ENV_TOPUP] = savedTopup;
+if (savedAutorenew === undefined) delete process.env[ENV_AUTORENEW]; else process.env[ENV_AUTORENEW] = savedAutorenew;
 
 // ── 18. A1 active 注入委派指引（env 可关） ────────────────────────────
 const ENV_DELEG = "PI_LAMBOY_GOAL_DELEGATION";
@@ -743,8 +749,17 @@ reset();
 // ── 20. B4 autoExtend（默认关；开启时跨越 tokenBudget 自动续期而非 budget_limited） ──
 const ENV_STEP = "PI_LAMBOY_GOAL_EXTEND_STEP";
 const ENV_MAX2 = "PI_LAMBOY_GOAL_TOPUP_MAX";
+const ENV_AUTORENEW_B4 = "PI_LAMBOY_GOAL_AUTORENEW";
 const savedStep = process.env[ENV_STEP], savedMax2 = process.env[ENV_MAX2];
-function b4Reset() { reset(); delete process.env[ENV_STEP]; delete process.env[ENV_MAX2]; }
+const savedAutorenewB4 = process.env[ENV_AUTORENEW_B4];
+function b4Reset() {
+  reset();
+  delete process.env[ENV_STEP];
+  delete process.env[ENV_MAX2];
+  // Isolate autoExtend semantics from the 2026-10-26 auto-renew policy
+  // (on by default) — these cases assert the legacy topUps behaviour.
+  process.env[ENV_AUTORENEW_B4] = "0";
+}
 
 b4Reset();
 {
@@ -847,6 +862,8 @@ b4Reset();
 
 if (savedStep === undefined) delete process.env[ENV_STEP]; else process.env[ENV_STEP] = savedStep;
 if (savedMax2 === undefined) delete process.env[ENV_MAX2]; else process.env[ENV_MAX2] = savedMax2;
+if (savedAutorenewB4 === undefined) delete process.env[ENV_AUTORENEW_B4];
+else process.env[ENV_AUTORENEW_B4] = savedAutorenewB4;
 
 // ── 21. criterion 参数名回归（snake_case 读取修复） ──────────────────
 // 事故（2026-10-19 实测）：创建 goal 时声明 completion_criterion，注入/面板却无

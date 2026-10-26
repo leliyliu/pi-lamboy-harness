@@ -168,9 +168,14 @@ export default function (pi: ExtensionAPI) {
       if (tokens > 0) {
         // B4: autoExtend goals report the stepped-up budget (autoExtendedTo)
         // instead of crossing (crossedBudget=false — the goal didn't stop).
-        const { crossedBudget, autoExtendedTo } = goalManager.recordTurn(tokens);
+        const { crossedBudget, autoExtendedTo, autoRenewed } = goalManager.recordTurn(tokens);
         if (crossedBudget) {
           _ctx.ui.notify("Goal budget exceeded — goal blocked.", "warning");
+        } else if (autoRenewed) {
+          _ctx.ui.notify(
+            `Goal budget auto-renewed to ${autoRenewed.budget} (auto-renew #${autoRenewed.count}) — continuing.`,
+            "info",
+          );
         } else if (autoExtendedTo !== undefined) {
           _ctx.ui.notify(`Goal budget auto-extended to ${autoExtendedTo} (autoExtend goal).`, "info");
         }
@@ -195,9 +200,14 @@ export default function (pi: ExtensionAPI) {
         if (t > 0) delegatedTokens += t;
       }
       if (delegatedTokens > 0) {
-        const { crossedBudget, autoExtendedTo } = goalManager.recordTokenUsage(delegatedTokens);
+        const { crossedBudget, autoExtendedTo, autoRenewed } = goalManager.recordTokenUsage(delegatedTokens);
         if (crossedBudget) {
           _ctx.ui.notify("Goal budget exceeded (delegated tokens) — goal blocked.", "warning");
+        } else if (autoRenewed) {
+          _ctx.ui.notify(
+            `Goal budget auto-renewed to ${autoRenewed.budget} (auto-renew #${autoRenewed.count}, delegated tokens) — continuing.`,
+            "info",
+          );
         } else if (autoExtendedTo !== undefined) {
           _ctx.ui.notify(`Goal budget auto-extended to ${autoExtendedTo} (delegated tokens, autoExtend goal).`, "info");
         }
