@@ -736,7 +736,19 @@ export class GoalManager {
     if (used * 100 < budget * pct) return undefined;
     const renewals = g.autoRenewals ?? 0;
     if (!this.canAutoRenew(renewals)) return undefined;
-    const next = this.autoRenewBudget(used);
+    // Size the step from the CURRENT BUDGET, never from usage (reviewer
+    // Finding 1, 2026-10-28): the trigger is a percentage of the *new*
+    // budget, so sizing from `used` (used + 800k) re-fires while usage is
+    // only ~20% of the freshly raised budget and converges on the fixed
+    // point b = 0.8b + 800k = 4M — all 10 renewals burned by used≈3.66M,
+    // i.e. the goal stops EARLIER than the crossing-only path (8M).
+    // Budget-based sizing keeps the pre-diff ceiling: 800k → 1.6M → 2.4M →
+    // 3.2M → 4M → 5M → 6.25M → 7.8125M → 8M (8 renewals ≤ default 10), just
+    // reached before exhaustion instead of at it. `max(budget, used)` keeps a
+    // full step of headroom when one turn jumps far past the tier (it then
+    // behaves exactly like the crossing formula) and makes the top-up a no-op
+    // once usage already sits at the hard cap.
+    const next = this.autoRenewBudget(Math.max(budget, used));
     if (next === undefined || next <= budget) return undefined;
     return { budget: next, count: renewals + 1 };
   }
@@ -787,6 +799,12 @@ export class GoalManager {
       budgetLimits: { ...g.budgetLimits, tokenBudget: next },
       autoRenewals: renewals + 1,
       status: "active" as GoalStatus,
+      // Finding 2 (review 2026-10-28): fold the in-flight active interval
+      // before restarting the clock — an `active` but over-budget goal
+      // (set_goal_budget never flips status, or a restored entry) would
+      // otherwise lose that interval from wallClockBudgetMs. No-op for the
+      // budget_limited case (wallClockResumedAt is already cleared).
+      wallClockMs: liveWallClockMs(g),
       wallClockResumedAt: Date.now(),
       terminalReason: undefined,
     };
@@ -1013,11 +1031,14 @@ export class GoalManager {
     }
 
     // Block all tools when budget/usage limited. B2 (spec §3): the whitelist
-    // now includes `handoff` — the exhausted turn must still be able to park
-    // the handoff briefing (B1). Enforced by the tool_call gate in
-    // extensions/40-goal.ts (this used to be defined but never wired).
-    // Nit 5 (review 2026-10-19): single source GOAL_LIMITED_ALLOWED_TOOLS in
-    // types.ts — shared with the wrap-up text and the gate reason.
+    // includes `handoff`, but 2026-10-28 (C3) it is no longer *instructed* for
+    // budget cases — recovery is automatic (autoRecoverBudget) and a handoff
+    // cannot add budget. `handoff` stays allowed only so the user-initiated
+    // content-exhaustion flow is never mechanically blocked.
+    // Enforced by the tool_call gate in extensions/40-goal.ts (this used to be
+    // defined but never wired). Nit 5 (review 2026-10-19): single source
+    // GOAL_LIMITED_ALLOWED_TOOLS in types.ts — shared with the wrap-up text and
+    // the gate reason.
     if (g.status !== "budget_limited" && g.status !== "usage_limited") return false;
     if (GOAL_LIMITED_ALLOWED_TOOLS.includes(toolName)) return false;
     return true;

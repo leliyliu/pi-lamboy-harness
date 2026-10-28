@@ -201,9 +201,12 @@ reset();
   goalManager.createGoal("headroom probe", undefined, { tokenBudget: 800_000 }, "user");
   const r = goalManager.recordTurn(640_000); // 80% of 800k
   const g = goalManager.getGoal();
-  check("headroom: 80% 档提前扩预算",
-    g.budgetLimits.tokenBudget === expectedBudget(640_000),
-    `${g.budgetLimits.tokenBudget} vs ${expectedBudget(640_000)}`);
+  // Reviewer Finding 1 (2026-10-28): the step is sized from the CURRENT
+  // BUDGET, not from usage — sizing from usage converges on 4M and burns all
+  // 10 renewals there. So 800k + 800k = 1.6M, not expectedBudget(640k).
+  check("headroom: 80% 档提前扩预算（按当前预算定步长）",
+    g.budgetLimits.tokenBudget === expectedBudget(800_000),
+    `${g.budgetLimits.tokenBudget} vs ${expectedBudget(800_000)}`);
   check("headroom: goal 保持 active", g.status === "active", g.status);
   check("headroom: autoRenewals +1", (g.autoRenewals ?? 0) === 1, String(g.autoRenewals));
   check("headroom: reason=headroom", r.autoRenewed?.reason === "headroom", JSON.stringify(r.autoRenewed));
@@ -257,6 +260,42 @@ reset();
   check("headroom: turn 同时越界时不预扩",
     g.status !== "active" && (g.autoRenewals ?? 0) === 0,
     JSON.stringify({ s: g.status, ar: g.autoRenewals }));
+}
+
+// headroom 需能一路撑到 8M 硬上限（不是提前烧光 10 次续接）
+// Reviewer Finding 1 回归：固定点 b=0.8b+800k=4M 的错误实现在 used≈3.66M 就停。
+reset();
+{
+  goalManager.createGoal("headroom ceiling probe", undefined, { tokenBudget: 800_000 }, "user");
+  let guard = 0;
+  while (goalManager.getGoal().status === "active" && guard++ < 200) {
+    const g = goalManager.getGoal();
+    goalManager.recordTurn(50_000);
+  }
+  const g = goalManager.getGoal();
+  check("headroom: 反复续接能到达 8M 硬上限（而非 4M 固定点）",
+    g.budgetLimits.tokenBudget === 8_000_000,
+    String(g.budgetLimits.tokenBudget));
+  check("headroom: 总续接次数 ≤ 默认上限 10",
+    (g.autoRenewals ?? 0) <= 10, String(g.autoRenewals));
+  check("headroom: 最终停在 budget_limited（硬上限）",
+    g.status === "budget_limited", g.status);
+  check("headroom: 停止时用量接近 8M（未提前烧完配额）",
+    g.tokensUsed >= 7_900_000,
+    String(g.tokensUsed));
+}
+
+// recordTokenUsage（委派 token）同样享受提前量 top-up
+reset();
+{
+  goalManager.createGoal("headroom delegated probe", undefined, { tokenBudget: 800_000 }, "user");
+  const r = goalManager.recordTokenUsage(640_000);
+  const g = goalManager.getGoal();
+  check("headroom: recordTokenUsage 也预扩",
+    g.budgetLimits.tokenBudget === expectedBudget(800_000) && r.autoRenewed?.reason === "headroom",
+    JSON.stringify({ b: g.budgetLimits.tokenBudget, r: r.autoRenewed }));
+  check("headroom: recordTokenUsage 不计 turn",
+    g.turnsUsed === 0, String(g.turnsUsed));
 }
 
 // ── 10. C2 autoRecoverBudget（budget_limited 再入点） ───────────────
@@ -328,6 +367,30 @@ reset();
 {
   goalManager.createGoal("recover active probe", undefined, { tokenBudget: 800_000 }, "user");
   check("recover: active 且未超限 → no-op", goalManager.autoRecoverBudget("runtime") === null);
+}
+
+// Finding 2 (review 2026-10-28): active 但超预算时，恢复前必须把在途
+// wall-clock 区间折进 wallClockMs，否则 wallClockBudgetMs 会少算。
+reset();
+{
+  goalManager.clear();
+  const nowMs = Date.now();
+  goalManager.restoreFromData({
+    goalId: "g-recover-wallclock", objective: "wallclock probe", status: "active",
+    lastActor: "runtime", lastActedAt: new Date(nowMs).toISOString(), turnsUsed: 3,
+    tokensUsed: 900_000, wallClockMs: 10_000,
+    wallClockResumedAt: nowMs - 5_000,
+    budgetLimits: { tokenBudget: 800_000 },
+  });
+  const r = goalManager.autoRecoverBudget("runtime");
+  const g = goalManager.getGoal();
+  check("recover wallclock: 扩容恢复", r?.extended === true, JSON.stringify(r));
+  check("recover wallclock: 在途 5s 折入 wallClockMs",
+    g.wallClockMs >= 14_500 && g.wallClockMs <= 16_500,
+    String(g.wallClockMs));
+  check("recover wallclock: 区间从恢复时刻重新计时",
+    typeof g.wallClockResumedAt === "number" && Date.now() - g.wallClockResumedAt < 1_000,
+    String(g.wallClockResumedAt));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

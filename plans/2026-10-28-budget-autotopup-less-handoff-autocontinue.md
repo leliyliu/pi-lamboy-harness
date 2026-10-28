@@ -110,7 +110,7 @@ autoRecoverBudget(): { renewed: true; newBudget: number; count: number } | null
 
 | 风险 | 缓解 |
 |---|---|
-| 提前扩预算让 token 消耗更快失控 | 仍受 `PI_LAMBOY_GOAL_AUTORENEW_MAX`(10) 与 `PI_LAMBOY_GOAL_MAX_TOKENS`(8M) 双重上限；`PI_LAMBOY_GOAL_TOPUP_AT=0` 一键退回「只在跨限时续」 |
+| 提前扩预算让 token 消耗更快失控 | 仍受 `PI_LAMBOY_GOAL_AUTORENEW_MAX`(10) 与 `PI_LAMBOY_GOAL_MAX_TOKENS`(8M) 双重上限；`PI_LAMBOY_GOAL_TOPUP_AT=0` 只关闭 C1 提前量（撞限续接 + C2 自动复活仍在），真正的总开关是 `PI_LAMBOY_GOAL_AUTORENEW=0`（C1/C2 同时失效） |
 | `context` 里改 goal 状态引起递归/抖动 | `autoRecoverBudget` 幂等（预算已高于 used 就 no-op），恢复后注入不再含 wrap-up，事件不会自激 |
 | 自动提交 briefing 抢走用户对首条消息的控制 | `PI_LAMBOY_HANDOFF_AUTOSUBMIT=0` 回退；用户已在 `editor` 里审阅/编辑过 briefing |
 | 旧测试固化「95% 催 handoff」语义 | 按新语义重写 §14/§15/§16，CHANGELOG 记录行为变更 |
@@ -130,6 +130,12 @@ autoRecoverBudget(): { renewed: true; newBudget: number; count: number } | null
 
 **测试**：`npm test` 全绿（goal 135 / goal-autorenew 49 / handoff 55 / handoff-autosubmit 10 新增；全套 `all suites passed`），`npx tsc -p tsconfig.json` 零错误。
 新增用例覆盖：79%/80% 分界、`reason` 标记、`TOPUP_AT=0`、8M 触顶后不再扩、turn 双越界不预扩、`autoRecoverBudget` 复活/不复活矩阵（turn 越界、超总上限、关闭开关、已覆盖用量、active 未超限）、自动提交 / env 回退 / 发送失败回落。
+
+**reviewer 复核（2026-10-28）与修复**：
+- **Finding 1（P0，已修）**：`headroomTopUp` 原按 `used` 定步长（`used+800k`），而触发阈值是新预算的 80%，迭代收敛到不动点 `b=0.8b+800k=4M` —— 10 次续接在 `used≈3.66M` 烧完，比改动前（8M）**提前 54% 停**，末段还几乎每轮一次 notify。修复：按 `max(budget, used)` 定步长（`index.ts:headroomTopUp`），序列回到 `800k→1.6M→2.4M→3.2M→4M→5M→6.25M→7.8125M→8M`（8 次），并用「反复 recordTurn 直到停」的循环测试钉住 8M 上限与 ≤10 次。
+- **Finding 2（P2，已修）**：`autoRecoverBudget` 原来直接重置 `wallClockResumedAt`，会丢掉在途 active 区间；现先把 `liveWallClockMs(g)` 折入 `wallClockMs`（对 budget_limited 是 no-op），并加 5s 在途区间的回归用例。
+- **Finding 3（P2，已修）**：补 `recordTokenUsage` 提前量用例、`restoreFromData(budget_limited)` 走真实 `context` handler 的接线用例（`tests/goal-wiring.test.mjs`）、`update_goal(active)` 自愈用例（§17h2，1.7M）；并把两个「vacuous pass」旧用例改为真断言（§10b 无预算可扩 → no-op；§17h 改为 AUTORENEW=0 下的 no-op）。
+- 另修正 stale 注释（`index.ts:shouldBlockTool` 白名单理由、`types.ts` GOAL_LIMITED_ALLOWED_TOOLS 注释）与本文档 §5 回滚说明。
 
 **待实机验收（需用户配合，约 2 分钟）**：
 1. `PI_LAMBOY_GOAL_MIN_TOKEN_BUDGET=0` 启动，`create_goal(tokenBudget≈300000)` 跑一个读多文件的小任务；

@@ -280,16 +280,16 @@ reset();
   check("usage_limited recovers to active via update_goal",
     goalManager.getGoal()?.status === "active", goalManager.getGoal()?.status);
 
-  // 10b. budget_limited → update_goal(active) → 不恢复（保留用户决策）
-  // 证据: recordTurn 的 tokensUsed 单调累积不重置, 恢复后必再超限,
-  // LLM 自动恢复=白烧 token。budget_limited 须靠 set_goal_budget/ /goal resume。
+  // 10b. budget_limited → update_goal(active)：C2（2026-10-28）之后改由 runtime
+  // 续接 + 恢复（tokensUsed 单调的问题由"扩预算"解决，而不是"不许恢复"）。
+  // 没有任何 token 预算可扩时（无 budgetLimits）仍是 no-op。
   goalManager.clear();
-  goalManager.createGoal("budget_limited no-auto-recovery probe");
+  goalManager.createGoal("budget_limited no-budget probe");
   goalManager.markBudgetLimited("tokenBudget exceeded");
   check("budget_limited set", goalManager.getGoal()?.status === "budget_limited",
     goalManager.getGoal()?.status);
   await updateGoal.execute("tc-r2", { status: "active" }, null, null, {});
-  check("budget_limited does NOT auto-recover (reserved for user decision)",
+  check("budget_limited 无 token 预算可扩 → 仍 no-op",
     goalManager.getGoal()?.status === "budget_limited", goalManager.getGoal()?.status);
 
   // 10c. complete → update_goal(active) → 不复活（墓碑保护）
@@ -690,7 +690,8 @@ process.env[ENV_TOPUP] = "0";
   check("17g TOPUP_MAX=0 → 第 4 次 top-up 仍 topped-up",
     kinds[3] === "topped-up", JSON.stringify(kinds));
 }
-// 17h. update_goal(active) 对 budget_limited 仍 no-op（用户入口独占，回归 10b 意图）
+// 17h. 自动续接关闭时，update_goal(active) 对 budget_limited 仍 no-op
+// （master switch 关掉后 C2 也失效；topUps 不被偷跑）
 topupReset();
 {
   const tools = new Map();
@@ -699,10 +700,35 @@ topupReset();
   goalManager.createGoal("no-auto-recover probe", undefined, { tokenBudget: 50000 });
   goalManager.recordTurn(60000);
   await updateGoal.execute("tc-tu", { status: "active" }, null, null, {});
-  check("17h budget_limited 不被 update_goal(active) 恢复",
+  check("17h AUTORENEW=0 时 budget_limited 不被 update_goal(active) 恢复",
     goalManager.getGoal()?.status === "budget_limited", goalManager.getGoal()?.status);
   check("17h 也不因 no-op 恢复偷跑 top-up",
     goalManager.getGoal()?.topUps === undefined, String(goalManager.getGoal()?.topUps));
+}
+// 17h2. C2（2026-10-28）：自动续接开启时，恢复出来的 budget_limited 经
+// update_goal(active) 自动扩预算并回到 active（模型自愈路径接线）。
+{
+  delete process.env[ENV_AUTORENEW];
+  const tools = new Map();
+  registerGoalTools({ registerTool: (def) => tools.set(def.name, def) }, goalManager);
+  const updateGoal = tools.get("update_goal");
+  goalManager.clear();
+  goalManager.restoreFromData({
+    goalId: "g-17h2", objective: "model self-heal probe", status: "budget_limited",
+    lastActor: "runtime", lastActedAt: new Date().toISOString(), turnsUsed: 4,
+    tokensUsed: 900_000, wallClockMs: 0, budgetLimits: { tokenBudget: 800_000 },
+    terminalReason: "Budget exceeded",
+  });
+  await updateGoal.execute("tc-tu2", { status: "active" }, null, null, {});
+  const g = goalManager.getGoal();
+  check("17h2 update_goal(active) 触发自动续接 → active",
+    g?.status === "active", g?.status);
+  check("17h2 预算扩到 max(used+800k, 25%) = 1.7M",
+    g?.budgetLimits?.tokenBudget === 1_700_000, String(g?.budgetLimits?.tokenBudget));
+  check("17h2 autoRenewals=1、topUps 未动",
+    (g?.autoRenewals ?? 0) === 1 && g?.topUps === undefined,
+    JSON.stringify({ ar: g?.autoRenewals, t: g?.topUps }));
+  process.env[ENV_AUTORENEW] = "0"; // 恢复本区块的隔离环境
 }
 // 17i. topUps 持久化 roundtrip（entry 序列化 + 恢复）
 topupReset();

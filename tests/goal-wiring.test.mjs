@@ -212,6 +212,68 @@ delete process.env.PI_LAMBOY_GOAL_TOOL_GATE;
   process.env.PI_LAMBOY_GOAL_AUTORENEW = "0";
 }
 
+// ── C2 (2026-10-28): context 事件的自动复活接线 ─────────────────────
+// 设计记录 plans/2026-10-28-budget-autotopup-less-handoff-autocontinue.md §4.4：
+// restoreFromData(budget_limited) → 走真实 context handler → goal 变 active、
+// 预算扩到位、注入里不再有 handoff 指令。
+{
+  delete process.env.PI_LAMBOY_GOAL_AUTORENEW;
+  const mod2 = await import(`../extensions/40-goal.ts?case=wiring-recover`);
+  const h2 = new Map();
+  const entries2 = [];
+  const notified2 = [];
+  const pi2 = {
+    on: (ev, fn) => { if (!h2.has(ev)) h2.set(ev, []); h2.get(ev).push(fn); },
+    registerTool: () => {},
+    registerCommand: () => {},
+    appendEntry: (type, data) => entries2.push({ type: "custom", customType: type, data }),
+  };
+  const ctx2 = {
+    sessionManager: { getEntries: () => entries2 },
+    ui: { setStatus: () => {}, notify: (m, l) => notified2.push([m, l]), theme: { fg: (_c, t) => t } },
+  };
+  mod2.default(pi2);
+
+  const limitedGoal = {
+    goalId: "g-wiring-recover", objective: "restored limited goal", status: "budget_limited",
+    lastActor: "runtime", lastActedAt: new Date().toISOString(), turnsUsed: 10,
+    tokensUsed: 900_000, wallClockMs: 0, budgetLimits: { tokenBudget: 800_000 },
+    terminalReason: "Budget exceeded",
+  };
+
+  // 1) session_start：上一进程遗留的 budget_limited 被恢复后立刻续接
+  goalManager.clear();
+  entries2.push({ type: "custom", customType: "lamboy_goal", data: limitedGoal });
+  for (const fn of h2.get("session_start") ?? []) await fn({ type: "session_start" }, ctx2);
+  const afterStart = goalManager.getGoal();
+  check("C2 wiring: session_start 恢复 budget_limited → active",
+    afterStart?.status === "active", afterStart?.status);
+  check("C2 wiring: 预算扩到 auto-renew 公式值",
+    afterStart?.budgetLimits?.tokenBudget === 1_700_000,
+    String(afterStart?.budgetLimits?.tokenBudget));
+
+  // 2) context 兜底：每次模型请求前再检查一次（跨进程没跑 session_start 的场景）
+  goalManager.clear();
+  goalManager.restoreFromData(limitedGoal);
+  const messages = [];
+  for (const fn of h2.get("context") ?? []) await fn({ type: "context", messages }, ctx2);
+  const afterCtx = goalManager.getGoal();
+  check("C2 wiring: context 事件兜底复活",
+    afterCtx?.status === "active" && afterCtx?.budgetLimits?.tokenBudget === 1_700_000,
+    JSON.stringify({ s: afterCtx?.status, b: afterCtx?.budgetLimits?.tokenBudget }));
+
+  const injected = messages.map((m) => (m.content?.[0]?.text ?? "")).join("\n");
+  check("C2 wiring: 恢复后注入是 active goal（含 objective）",
+    injected.includes("restored limited goal"), injected.slice(0, 120));
+  check("C2 wiring: 注入不再出现 handoff 落盘指令",
+    !/handoff tool NOW/i.test(injected) && !/Write the handoff briefing/i.test(injected),
+    injected.slice(0, 160));
+  check("C2 wiring: 有自动续接通知",
+    notified2.some(([m]) => /auto-renewed/i.test(m)),
+    JSON.stringify(notified2));
+  process.env.PI_LAMBOY_GOAL_AUTORENEW = "0";
+}
+
 goalManager.clear();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

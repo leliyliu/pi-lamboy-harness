@@ -118,9 +118,14 @@ export const GOAL_ENTRY_TYPE = "lamboy_goal";
 /**
  * B2 (spec §3): tools always allowed while budget_limited / usage_limited.
  * Single source shared by the wrap-up text, shouldBlockTool and the
- * tool_call gate reason (extensions/40-goal.ts) — a drift in any one of
- * them re-creates the B1 failure mode (the exhausted turn must always be
- * able to park the handoff briefing). Review nit 5, 2026-10-19.
+ * tool_call gate reason (extensions/40-goal.ts).
+ *
+ * 2026-10-28 (C3): `handoff` is kept allowed but is NO LONGER instructed for
+ * budget exhaustion — the runtime renews the budget itself (auto-renew /
+ * headroom top-up / autoRecoverBudget), and a handoff cannot add budget.
+ * Keeping it in the allowlist only avoids mechanically blocking the
+ * user-initiated content-exhaustion flow; the wrap-up and the gate reason both
+ * tell the model not to hand off for budget reasons. Review 2026-10-28.
  */
 export const GOAL_LIMITED_ALLOWED_TOOLS: readonly string[] = ["get_goal", "handoff", "update_goal"];
 /** Human-readable form for injection/reason strings (same set, in speech order). */
