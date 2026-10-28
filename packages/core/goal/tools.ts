@@ -64,8 +64,9 @@ export function registerGoalTools(pi: any, goalManager: GoalManager): void {
           type: "boolean",
           description:
             "autoExtend: auto-extend the token budget on exhaustion instead of entering budget_limited. " +
-            "Default false: the exhausted turn is gated to write a handoff briefing and renewal stays user-decided " +
-            "(/goal resume auto-tops-up). Set true only for goals that must never be interrupted.",
+            "Default false: the runtime's auto-renew policy (+800k ahead of exhaustion, max 10, 8M total) " +
+            "already keeps the goal running; autoExtend is the legacy +500k crossing-time variant and is not " +
+            "needed for normal goals.",
         },
       },
       required: ["objective"],
@@ -145,7 +146,7 @@ export function registerGoalTools(pi: any, goalManager: GoalManager): void {
       "update_goal: update the current goal status (complete requires verified=true when a completion_criterion was declared)",
     promptGuidelines: [
       "Use update_goal to mark the goal status as 'complete', 'paused', or 'active'",
-      "status='active' resumes from 'paused'/'blocked'/'usage_limited' — use it to self-recover after a provider 429 rate-limit clears; budget_limited is reserved for user decision (raise via set_goal_budget or /goal resume)",
+      "status='active' resumes from 'paused'/'blocked'/'usage_limited' — use it to self-recover after a provider 429 rate-limit clears; for 'budget_limited' the runtime renews automatically (top-up + resume) when a renewal is still possible",
       "Mark goal as 'complete' only when the objective is achieved and any stated validation has passed — verify the actual state against the objective and every explicit requirement; treat weak or indirect evidence as not complete",
       "If the goal was created with a completion_criterion, status='complete' is REFUSED unless you also pass verified=true in the same call — verified=true is your machine-readable assertion that you checked the criterion against the actual result",
       "Do not mark 'complete' merely because a budget is nearly exhausted or you want to stop",
@@ -204,11 +205,15 @@ export function registerGoalTools(pi: any, goalManager: GoalManager): void {
         case "active":
           // Resume from paused/blocked/usage_limited. usage_limited (provider 429)
           // is a temporary external limit — once the rate-limit window clears the
-          // model can self-recover. budget_limited is excluded: tokensUsed is
-          // monotonic so an auto-recover would re-limit immediately and burn
-          // tokens; it is reserved for user decision (set_goal_budget / /goal resume).
+          // model can self-recover. budget_limited (C2, 2026-10-28): the runtime
+          // renews + resumes on its own when a renewal is still allowed; when the
+          // hard cap already stopped it, autoRecoverBudget returns null and this
+          // stays a no-op (the user raises the cap).
           if (goal.status === "paused" || goal.status === "blocked" || goal.status === "usage_limited") {
             updated = goalManager.resume("model");
+          } else if (goal.status === "budget_limited") {
+            const recovered = goalManager.autoRecoverBudget("model");
+            updated = recovered ? goalManager.getGoal() : goal;
           } else {
             updated = goal;
           }

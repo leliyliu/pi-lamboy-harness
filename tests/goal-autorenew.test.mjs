@@ -27,6 +27,7 @@ const ENV_KEYS = [
   "PI_LAMBOY_GOAL_MAX_TOKENS",
   "PI_LAMBOY_GOAL_RENEW_STEP",
   "PI_LAMBOY_GOAL_TOPUP_MAX",
+  "PI_LAMBOY_GOAL_TOPUP_AT",
 ];
 function reset(env = {}) {
   goalManager.clear();
@@ -192,6 +193,141 @@ reset();
   check("autoRenewals is monotonic across restore",
     (goalManager.getGoal().autoRenewals ?? 0) === 1,
     String(goalManager.getGoal().autoRenewals));
+}
+
+// ── 9. C1 提前量自动扩预算（80% 档就加，不等撞墙） ──────────────────
+reset();
+{
+  goalManager.createGoal("headroom probe", undefined, { tokenBudget: 800_000 }, "user");
+  const r = goalManager.recordTurn(640_000); // 80% of 800k
+  const g = goalManager.getGoal();
+  check("headroom: 80% 档提前扩预算",
+    g.budgetLimits.tokenBudget === expectedBudget(640_000),
+    `${g.budgetLimits.tokenBudget} vs ${expectedBudget(640_000)}`);
+  check("headroom: goal 保持 active", g.status === "active", g.status);
+  check("headroom: autoRenewals +1", (g.autoRenewals ?? 0) === 1, String(g.autoRenewals));
+  check("headroom: reason=headroom", r.autoRenewed?.reason === "headroom", JSON.stringify(r.autoRenewed));
+  check("headroom: crossedBudget=false", r.crossedBudget === false, JSON.stringify(r));
+}
+
+reset();
+{
+  goalManager.createGoal("headroom below probe", undefined, { tokenBudget: 800_000 }, "user");
+  goalManager.recordTurn(632_000); // 79%
+  const g = goalManager.getGoal();
+  check("headroom: 79% 不扩预算",
+    g.budgetLimits.tokenBudget === 800_000 && (g.autoRenewals ?? 0) === 0,
+    JSON.stringify({ b: g.budgetLimits.tokenBudget, ar: g.autoRenewals }));
+}
+
+// PI_LAMBOY_GOAL_TOPUP_AT=0 → 退回「撞墙才续」
+reset({ PI_LAMBOY_GOAL_TOPUP_AT: 0 });
+{
+  goalManager.createGoal("headroom off probe", undefined, { tokenBudget: 800_000 }, "user");
+  goalManager.recordTurn(640_000);
+  const mid = goalManager.getGoal();
+  check("headroom off: 80% 不预扩",
+    mid.budgetLimits.tokenBudget === 800_000 && (mid.autoRenewals ?? 0) === 0,
+    JSON.stringify({ b: mid.budgetLimits.tokenBudget, ar: mid.autoRenewals }));
+  const r = goalManager.recordTurn(260_000); // 累计 900k → 撞墙
+  check("headroom off: 撞墙仍 auto-renew（reason=crossing）",
+    goalManager.getGoal().status === "active" && r.autoRenewed?.reason === "crossing",
+    JSON.stringify({ s: goalManager.getGoal().status, r: r.autoRenewed }));
+}
+
+// 总预算硬上限：提前量不能突破，且到顶后不再反复扩
+reset({ PI_LAMBOY_GOAL_MAX_TOKENS: 1_000_000 });
+{
+  goalManager.createGoal("headroom cap probe", undefined, { tokenBudget: 800_000 }, "user");
+  goalManager.recordTurn(640_000);
+  const g = goalManager.getGoal();
+  check("headroom: 受总预算上限约束", g.budgetLimits.tokenBudget === 1_000_000, String(g.budgetLimits.tokenBudget));
+  const r2 = goalManager.recordTokenUsage(200_000); // used 840k, budget already at cap
+  check("headroom: 触顶后不再扩",
+    goalManager.getGoal().budgetLimits.tokenBudget === 1_000_000 && r2.autoRenewed === undefined,
+    JSON.stringify(r2));
+}
+
+// 双跨越（turn 同时越界）不消耗提前量
+reset();
+{
+  goalManager.createGoal("headroom dual probe", undefined, { tokenBudget: 800_000, turnBudget: 1 }, "user");
+  goalManager.recordTurn(640_000);
+  const g = goalManager.getGoal();
+  check("headroom: turn 同时越界时不预扩",
+    g.status !== "active" && (g.autoRenewals ?? 0) === 0,
+    JSON.stringify({ s: g.status, ar: g.autoRenewals }));
+}
+
+// ── 10. C2 autoRecoverBudget（budget_limited 再入点） ───────────────
+function restoreLimited(used, budget, extra = {}) {
+  goalManager.clear();
+  goalManager.restoreFromData({
+    goalId: "g-recover-probe", objective: "recover probe", status: "budget_limited",
+    lastActor: "runtime", lastActedAt: new Date().toISOString(), turnsUsed: 5,
+    tokensUsed: used, wallClockMs: 0, budgetLimits: { tokenBudget: budget },
+    terminalReason: "Budget exceeded", ...extra,
+  });
+}
+
+reset();
+{
+  restoreLimited(900_000, 800_000);
+  const r = goalManager.autoRecoverBudget("runtime");
+  const g = goalManager.getGoal();
+  check("recover: budget_limited 自动复活",
+    r?.extended === true && r.resumed === true && g.status === "active",
+    JSON.stringify({ r, s: g.status }));
+  check("recover: 预算扩到公式值", g.budgetLimits.tokenBudget === expectedBudget(900_000),
+    String(g.budgetLimits.tokenBudget));
+  check("recover: autoRenewals +1", (g.autoRenewals ?? 0) === 1, String(g.autoRenewals));
+  check("recover: 幂等（再调一次 no-op）",
+    goalManager.autoRecoverBudget("runtime") === null &&
+      (goalManager.getGoal().autoRenewals ?? 0) === 1,
+    String(goalManager.getGoal().autoRenewals));
+}
+
+reset();
+{
+  restoreLimited(900_000, 800_000, { budgetLimits: { tokenBudget: 800_000, turnBudget: 3 }, turnsUsed: 9 });
+  check("recover: turn 越界不复活", goalManager.autoRecoverBudget("runtime") === null &&
+    goalManager.getGoal().status === "budget_limited",
+    goalManager.getGoal().status);
+}
+
+reset({ PI_LAMBOY_GOAL_MAX_TOKENS: 1_000_000 });
+{
+  restoreLimited(1_100_000, 800_000);
+  check("recover: 超过总预算上限不复活",
+    goalManager.autoRecoverBudget("runtime") === null &&
+      goalManager.getGoal().status === "budget_limited",
+    goalManager.getGoal().status);
+}
+
+reset();
+{
+  restoreLimited(500_000, 800_000); // 用户已括号提额但未 resume
+  const r = goalManager.autoRecoverBudget("runtime");
+  check("recover: 预算已覆盖用量 → 只 resume 不扩",
+    r?.extended === false && r.resumed === true &&
+      goalManager.getGoal().status === "active" &&
+      goalManager.getGoal().budgetLimits.tokenBudget === 800_000,
+    JSON.stringify({ r, s: goalManager.getGoal().status }));
+}
+
+reset({ PI_LAMBOY_GOAL_AUTORENEW: 0 });
+{
+  restoreLimited(900_000, 800_000);
+  check("recover: 关闭自动续接时不动",
+    goalManager.autoRecoverBudget("runtime") === null &&
+      goalManager.getGoal().status === "budget_limited",
+    goalManager.getGoal().status);
+}
+
+reset();
+{
+  goalManager.createGoal("recover active probe", undefined, { tokenBudget: 800_000 }, "user");
+  check("recover: active 且未超限 → no-op", goalManager.autoRecoverBudget("runtime") === null);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -57,6 +57,11 @@ export default function (pi: ExtensionAPI) {
     } catch { /* not critical */ }
 
     // Goal status bar (reflects restored state)
+    // C2 (2026-10-28): a goal restored as budget_limited (previous process or
+    // /handoff) is renewed here so the badge and the first request agree; the
+    // `context` hook retries on every request as a safety net.
+    try { goalManager.autoRecoverBudget("runtime"); } catch { /* non-fatal */ }
+
     const goalBadge = goalManager.buildFooterBadge();
     if (goalBadge) {
       const color = goalManager.getFooterBadgeColor();
@@ -87,8 +92,27 @@ export default function (pi: ExtensionAPI) {
     // @narumitw/pi-goal style: goal stays active, continues after compaction
   });
 
-  // Inject goal context into the system prompt
+  // Inject goal context into the system prompt.
+  // C2 (2026-10-28): before every model request, rescue a goal that is already
+  // over its token budget (e.g. restored from a previous session/process as
+  // budget_limited, or renewed once too late) instead of leaving it parked
+  // until the user runs /goal resume. Runs here because this hook fires on
+  // every request, including the first one after a restart or /handoff.
   pi.on("context", (event, _ctx) => {
+    try {
+      const recovered = goalManager.autoRecoverBudget("runtime");
+      if (recovered?.extended) {
+        _ctx.ui.notify(
+          `Goal budget auto-renewed to ${recovered.newBudget} (auto-renew #${recovered.count})` +
+            `${recovered.resumed ? " — goal resumed" : ""} — continuing.`,
+          "info",
+        );
+        updateGoalStatusBar(_ctx);
+      } else if (recovered?.resumed) {
+        _ctx.ui.notify("Goal resumed: the budget now covers usage.", "info");
+        updateGoalStatusBar(_ctx);
+      }
+    } catch { /* never break a model request */ }
     goalManager.injectIntoMessages(event.messages);
   });
 
@@ -136,7 +160,8 @@ export default function (pi: ExtensionAPI) {
         // wrap-up injection or shouldBlockTool.
         const reason =
           `Goal ${goalManager.getGoal()?.status}: only ${GOAL_LIMITED_ALLOWED_TOOLS_LABEL} allowed. ` +
-          `Write the handoff briefing (context, decisions, files, next task) so the user can continue via /handoff.`;
+          `The token budget is at its hard cap (or auto-renewal is off) — a handoff does not add budget. ` +
+          `Report status in 2-3 lines; the runtime resumes the goal automatically once the budget covers usage.`;
         try { ctx.ui.notify(reason, "warning"); } catch { /* non-TUI */ }
         return { block: true, reason };
       }
@@ -170,10 +195,11 @@ export default function (pi: ExtensionAPI) {
         // instead of crossing (crossedBudget=false — the goal didn't stop).
         const { crossedBudget, autoExtendedTo, autoRenewed } = goalManager.recordTurn(tokens);
         if (crossedBudget) {
-          _ctx.ui.notify("Goal budget exceeded — goal blocked.", "warning");
+          _ctx.ui.notify("Goal budget cap reached — goal blocked.", "warning");
         } else if (autoRenewed) {
           _ctx.ui.notify(
-            `Goal budget auto-renewed to ${autoRenewed.budget} (auto-renew #${autoRenewed.count}) — continuing.`,
+            `Goal budget ${autoRenewed.reason === "headroom" ? "topped up ahead of exhaustion" : "auto-renewed"} ` +
+              `to ${autoRenewed.budget} (auto-renew #${autoRenewed.count}) — continuing.`,
             "info",
           );
         } else if (autoExtendedTo !== undefined) {
@@ -202,10 +228,11 @@ export default function (pi: ExtensionAPI) {
       if (delegatedTokens > 0) {
         const { crossedBudget, autoExtendedTo, autoRenewed } = goalManager.recordTokenUsage(delegatedTokens);
         if (crossedBudget) {
-          _ctx.ui.notify("Goal budget exceeded (delegated tokens) — goal blocked.", "warning");
+          _ctx.ui.notify("Goal budget cap reached (delegated tokens) — goal blocked.", "warning");
         } else if (autoRenewed) {
           _ctx.ui.notify(
-            `Goal budget auto-renewed to ${autoRenewed.budget} (auto-renew #${autoRenewed.count}, delegated tokens) — continuing.`,
+            `Goal budget ${autoRenewed.reason === "headroom" ? "topped up ahead of exhaustion" : "auto-renewed"} ` +
+              `to ${autoRenewed.budget} (auto-renew #${autoRenewed.count}, delegated tokens) — continuing.`,
             "info",
           );
         } else if (autoExtendedTo !== undefined) {

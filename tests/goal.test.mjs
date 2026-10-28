@@ -511,11 +511,23 @@ policyReset();
     JSON.stringify(goalManager.getGoal()?.budgetLimits));
 }
 
-// ── 14. A3 预算档位注入（80% 委派 / 95% handoff 落盘，spec §2-A3） ─────
+// ── 14. 预算档位注入（80% 委派 / 95% 继续干，C4 2026-10-28） ────────────
+// 档位语义变更：auto-renew + headroom top-up 之后，模型在任何档位都不得
+// 因预算去 handoff（handoff 只留给上下文耗尽）。
 const ENV_WARN = "PI_LAMBOY_GOAL_BUDGET_WARN";
 const ENV_CRIT = "PI_LAMBOY_GOAL_BUDGET_CRIT";
+const ENV_AUTORENEW_T = "PI_LAMBOY_GOAL_AUTORENEW";
 const savedWarn = process.env[ENV_WARN], savedCrit = process.env[ENV_CRIT];
-function tierReset() { reset(); delete process.env[ENV_WARN]; delete process.env[ENV_CRIT]; }
+const savedAutorenewT = process.env[ENV_AUTORENEW_T];
+function tierReset() {
+  reset();
+  delete process.env[ENV_WARN];
+  delete process.env[ENV_CRIT];
+  // Tier snapshots must stay under their limit: disable both renewal paths so
+  // recordTurn cannot top the budget up (that would move the percentage).
+  process.env[ENV_AUTORENEW_T] = "0";
+  process.env.PI_LAMBOY_GOAL_TOPUP_AT = "0";
+}
 function tierAt(used) {
   goalManager.clear();
   goalManager.createGoal("tier probe", undefined, { tokenBudget: 50000 });
@@ -527,42 +539,49 @@ tierReset();
 {
   check("14a 79% 无档位行", !/80%/.test(tierAt(39500)) && !/handoff/i.test(tierAt(39500)));
   const at80 = tierAt(40000);
-  check("14b 80% 注入委派偏好行", /80%/.test(at80) && /delegation/i.test(at80), at80);
-  check("14b 80% 无 handoff 落盘行", !/handoff/i.test(at80), at80);
+  check("14b 80% 注入继续干 + 委派偏好", /80%/.test(at80) && /keep working/i.test(at80) && /delegation/i.test(at80), at80);
+  check("14b 80% 不催 handoff（不提 handoff 工具）", !/handoff tool/i.test(at80), at80);
+  check("14b 80% 不再让用户手动提额", !/ask the user to raise via set_goal_budget/i.test(at80), at80);
   const at94 = tierAt(47000);
-  check("14c 94% 仍是委派行、无 handoff 行", /80%/.test(at94) && /delegation/i.test(at94) && !/handoff/i.test(at94), at94);
+  check("14c 94% 仍是 80% 档、不催 handoff", /80%/.test(at94) && /delegation/i.test(at94) && !/handoff tool/i.test(at94), at94);
   const at95 = tierAt(47500);
-  check("14d 95% 注入 handoff 落盘指令", /95%/.test(at95) && /handoff tool NOW/i.test(at95), at95);
+  check("14d 95% 注入「继续干 + 不要为预算 handoff」",
+    /95%/.test(at95) && /keep working/i.test(at95) && /do NOT call the handoff tool/i.test(at95), at95);
+  check("14d 95% 不再出现 NOW 式紧急指令", !/NOW/i.test(at95), at95);
   // buildInjection 集成: 档位行随 active 注入一起出现
   check("14e buildInjection 含档位行", /95%/.test(goalManager.buildInjection() ?? ""), "");
 }
 // 14f. env 关闭档位
 tierReset();
 process.env[ENV_WARN] = "0";
-check("14f WARN=0 关闭 80% 委派行", !/prefer delegation/i.test(tierAt(40000)) && !/≥80%/.test(tierAt(40000)));
+check("14f WARN=0 关闭 80% 委派行", !/≥80%/.test(tierAt(40000)) && !/keep working/i.test(tierAt(40000)));
 tierReset();
 process.env[ENV_CRIT] = "0";
 {
   const line = tierAt(47500);
-  check("14g CRIT=0 关闭 95% handoff 行（80% 委派行仍在）", !/handoff/i.test(line) && /80%/.test(line), line);
+  check("14g CRIT=0 关闭 95% 行（80% 行仍在）", !/≥95%/.test(line) && /≥80%/.test(line), line);
 }
 if (savedWarn === undefined) delete process.env[ENV_WARN]; else process.env[ENV_WARN] = savedWarn;
 if (savedCrit === undefined) delete process.env[ENV_CRIT]; else process.env[ENV_CRIT] = savedCrit;
+if (savedAutorenewT === undefined) delete process.env[ENV_AUTORENEW_T]; else process.env[ENV_AUTORENEW_T] = savedAutorenewT;
+delete process.env.PI_LAMBOY_GOAL_TOPUP_AT;
 
-// ── 15. B1 budget_limited wrap-up 改版（耗尽 turn 先写 handoff 草稿） ────
+// ── 15. budget_limited wrap-up（C3 2026-10-28：去 handoff 化） ───────────
 reset();
 {
   goalManager.createGoal("wrap-up budget probe");
   goalManager.markBudgetLimited("tokenBudget exceeded");
   const text = goalManager.buildWrapUpInjection() ?? "";
-  check("15a 注入指示立即调 handoff 工具写 briefing",
-    /handoff tool NOW/i.test(text) && /briefing/i.test(text), text.slice(0, 150));
+  check("15a 注入不再指挥调用 handoff 工具", !/handoff tool NOW/i.test(text), text.slice(0, 150));
+  check("15a 注入说明 handoff 不会增加预算", /handoff does NOT add budget/i.test(text), text.slice(0, 200));
   check("15b 注入声明白名单 get_goal/handoff/update_goal",
     /get_goal/.test(text) && /handoff/.test(text) && /update_goal/.test(text), "");
-  check("15c 注入禁止继续 goal 工作", /Do NOT continue goal work/i.test(text), "");
-  check("15d 注入指向 /handoff 一键续接", /\/handoff/i.test(text), "");
-  check("15e 注入要求 briefing 含 objective/criterion/剩余工作/建议预算",
-    /objective/i.test(text) && /criterion/i.test(text) && /remaining/i.test(text) && /budget/i.test(text), "");
+  check("15c 注入要求 2-3 行收尾", /2-3 line wrap-up/i.test(text), "");
+  check("15c 注入要求停止重工具工作", /Stop tool-heavy goal work/i.test(text), "");
+  check("15d 注入指向 set_goal_budget / /goal resume 解封",
+    /set_goal_budget/.test(text) && /\/goal resume/.test(text), "");
+  check("15d 注入声明预算覆盖后 runtime 自动 resume", /resumes the goal automatically/i.test(text), "");
+  check("15e 注入要求说明剩余工作需要的预算", /budget/i.test(text) && /what remains/i.test(text), "");
   // usage_limited 分支回归由第 11 节锁定，不在此重复
 }
 

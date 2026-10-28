@@ -82,10 +82,10 @@ export function budgetBandGuidance(goal: GoalSnapshot | null): string | undefine
   const report = computeBudgetReport(goal);
   const formatted = formatBudgetReport(report);
   if (!formatted) return undefined;
-  // A3 (spec §2): tier lines on top of the numeric budget line. They give the
-  // model a concrete protocol BEFORE exhaustion — 80%: prefer delegation (and
-  // ask to raise if legitimate); 95%: park the handoff briefing NOW so the
-  // user can continue in one keystroke even if the very next turn overflows.
+  // Budget tier lines on top of the numeric budget line (A3, spec §2; rewritten
+  // 2026-10-28 C4): the model must NEVER park a handoff for budget reasons —
+  // auto-renew (2026-10-26) plus the headroom top-up (C1) mean the runtime
+  // adds budget; handoff is reserved for context exhaustion.
   // Thresholds via PI_LAMBOY_GOAL_BUDGET_WARN / _CRIT (percent, 0 disables).
   const tier = budgetTierLine(report, goal.status);
   return tier ? `${formatted}\n${tier}` : formatted;
@@ -115,10 +115,10 @@ export function budgetTierLine(
   const usedPct = (report.tokenBudget - (report.remainingTokens ?? 0)) / report.tokenBudget * 100;
 
   if (critPct > 0 && usedPct >= critPct) {
-    return `Budget ≥${critPct}%: call the handoff tool NOW with a complete self-contained briefing (context, decisions, files, next task) so the user can continue via /handoff in one keystroke. Then keep working only if the user raises the budget.`;
+    return `Budget ≥${critPct}%: keep working. The automatic top-up fires at this level or at the crossing, so the budget will be raised for you — do NOT call the handoff tool and do NOT write a briefing for budget reasons (handoff is for context exhaustion only).`;
   }
   if (warnPct > 0 && usedPct >= warnPct) {
-    return `Budget ≥${warnPct}%: prefer delegation over inline work; if the goal legitimately needs more, ask the user to raise via set_goal_budget.`;
+    return `Budget ≥${warnPct}%: keep working — the runtime raises the token budget automatically before exhaustion, so do not stop, do not ask the user to raise it, and do not hand off for budget reasons. Keep preferring delegation over inline work.`;
   }
   return undefined;
 }

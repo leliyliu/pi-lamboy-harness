@@ -14,8 +14,9 @@
 //      (BorderedLoader, abortable).
 //   3. User reviews/edits the prompt in the editor.
 //   4. ctx.newSession({ parentSession }) — new session records the
-//      parent, editor prefilled with the prompt; user submits when
-//      ready.
+//      parent, then (2026-10-28) the edited briefing is submitted as its
+//      first user message so the new session continues by itself;
+//      PI_LAMBOY_HANDOFF_AUTOSUBMIT=0 keeps the old "prefill and wait" mode.
 // ============================================================
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
@@ -29,6 +30,7 @@ import {
   type HandoffBranchEntry,
 } from "../packages/core/handoff/prompt.ts";
 import { latestHandoffDraft } from "../packages/core/handoff/guard.ts";
+import { deliverHandoffBriefing } from "../packages/core/handoff/switch.ts";
 import { goalManager } from "../packages/core/goal/index.ts";
 
 export function registerHandoffCommands(pi: ExtensionAPI): void {
@@ -169,12 +171,22 @@ async function reviewAndSwitch(ctx: ExtensionCommandContext, promptText: string)
     withSession: async (replacementCtx) => {
       // Only the replacement-session ctx is valid here (docs: session
       // replacement lifecycle) — never the captured old one.
-      replacementCtx.ui.setEditorText(edited);
+      //
+      // C5 (2026-10-28): the briefing was already reviewed/edited in the
+      // editor above, so hand it to the new session as its FIRST user message.
+      // The old setEditorText-only path left the new session idle until the
+      // user pressed Enter ("handoff 之后还要我催"); deliverHandoffBriefing
+      // falls back to the editor prefill when auto-submit is off or fails.
+      const submitted = await deliverHandoffBriefing(replacementCtx, edited);
+
       if (renewal?.renewed) {
         replacementCtx.ui.notify(
-          `Goal budget extended to ${renewal.newBudget} for this session${renewal.resumed ? " (goal resumed)" : ""}.`,
+          `Goal budget extended to ${renewal.newBudget} for this session${renewal.resumed ? " (goal resumed)" : ""}` +
+            `${submitted ? " — continuing in the new session." : "."}`,
           "info",
         );
+      } else if (submitted) {
+        replacementCtx.ui.notify("Handoff briefing submitted — continuing in the new session.", "info");
       } else {
         replacementCtx.ui.notify("Handoff ready — submit when ready.", "info");
       }

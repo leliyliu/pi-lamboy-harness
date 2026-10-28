@@ -100,6 +100,18 @@ export interface GoalQueue {
   mode: "fifo" | "priority";
 }
 
+/**
+ * Runtime auto-renewal record (recordTurn / recordTokenUsage).
+ * `reason` distinguishes the two policies: "headroom" is the 2026-10-28
+ * pre-exhaustion top-up (budget raised at the warn tier), "crossing" is the
+ * 2026-10-26 renewal fired exactly at the limit.
+ */
+export interface AutoRenewInfo {
+  budget: number;
+  count: number;
+  reason?: "headroom" | "crossing";
+}
+
 // Entry type for persistence
 export const GOAL_ENTRY_TYPE = "lamboy_goal";
 

@@ -58,9 +58,9 @@ pi                                                      # 重启 pi，然后试�
 - **完成判据门禁** — 声明了 completionCriterion 时，需在同一次 `update_goal` 调用中传 `verified=true` 才能 complete（已写入工具描述）
 - **Budget 三重检测** — tokenBudget + turnBudget + wallClockBudgetMs，`set_goal_budget` 支持 turns/tokens/ms/s/min/hours；token 预算策略（模型路径强制）：未传默认 800k，低于 500k 下限自动抬升（env `PI_LAMBOY_GOAL_TOKEN_BUDGET` / `PI_LAMBOY_GOAL_MIN_TOKEN_BUDGET` 可调，设 0 关闭）
 - **委派加速** — active goal 每轮注入预授权委派指引（env `PI_LAMBOY_GOAL_DELEGATION=0` 关闭）；委派 subagent child tokens 经 `toolResults[].usage` 计入 goal 预算（turnsUsed 不变）
-- **预算档位** — ≥80% 注入“优先委派”、≥95% 注入“立即落盘 handoff briefing”（env `PI_LAMBOY_GOAL_BUDGET_WARN` / `_CRIT`，0 关闭）
-- **耗尽续接** — budget_limited wrap-up 强制先写 handoff briefing（白名单 get_goal/handoff/update_goal，单源常量，tool_call 硬拦截执行，env `PI_LAMBOY_GOAL_TOOL_GATE=0` 关闭）；**自动续接**让耗尽的 goal 继续跑：token 越界时 runtime 按 max(used+800k, ceil(used×1.25/50k)×50k) 扩容、保持 active，最多 10 次且单 goal 总上限 8M——这两项限制只作用于 auto-renew/handoff（env `PI_LAMBOY_GOAL_AUTORENEW=0` 关闭；`PI_LAMBOY_GOAL_AUTORENEW_MAX`、`PI_LAMBOY_GOAL_MAX_TOKENS`、`PI_LAMBOY_GOAL_RENEW_STEP` 调整）；`/goal resume` 对超限 goal 仍自动 top-up：max(tokensUsed+500k, ceil(tokensUsed×1.25/50k)×50k)，默认上限 3 次（env `PI_LAMBOY_GOAL_TOPUP_MAX`，0 不限）；`create_goal(autoExtend=true)`（默认关）耗尽时自动续期 +500k（env `PI_LAMBOY_GOAL_EXTEND_STEP`）而非 budget_limited
-- **handoff 预算连续** — `/handoff` 切到新 session 时 goal 仍在同一进程；handoff 钩子把 token 预算 +800k（同公式、受 8M 总上限、不消耗 auto-renew 次数），token 耗尽的 goal 恢复 active，并把 goal entry 落盘到新 session；turn/wall-clock 耗尽不恢复（env `PI_LAMBOY_HANDOFF_GOAL_RENEW=0` 关闭）
+- **预算档位** — ≥80% 注入「继续干（优先委派）+ runtime 会自动加预算」、≥95% 注入「不要为预算 handoff/写交接稿」（handoff 只留给上下文耗尽）（env `PI_LAMBOY_GOAL_BUDGET_WARN` / `_CRIT`，0 关闭）
+- **耗尽续接** — runtime 主动续接而不是停住：**提前量 top-up** 在告警档（env `PI_LAMBOY_GOAL_TOPUP_AT`，默认 80，0 关闭）就先扩预算，撞限时再兜底扩一次，预算 = max(used+800k, ceil(used×1.25/50k)×50k)，最多 10 次且单 goal 总上限 8M（env `PI_LAMBOY_GOAL_AUTORENEW=0` 关闭；`PI_LAMBOY_GOAL_AUTORENEW_MAX`、`PI_LAMBOY_GOAL_MAX_TOKENS`、`PI_LAMBOY_GOAL_RENEW_STEP` 调整）；跨进程/跨会话恢复出来的 `budget_limited` 在下一次模型请求时自动扩容并 resume（不再需要 `/goal resume`）；只有总预算硬上限才真正停 goal，其 wrap-up 只要求 2-3 行状态汇报（白名单 get_goal/handoff/update_goal，单源常量，tool_call 硬拦截执行，env `PI_LAMBOY_GOAL_TOOL_GATE=0` 关闭）；`/goal resume` 对超限 goal 仍自动 top-up：max(tokensUsed+500k, ceil(tokensUsed×1.25/50k)×50k)，默认上限 3 次（env `PI_LAMBOY_GOAL_TOPUP_MAX`，0 不限）；`create_goal(autoExtend=true)`（默认关）耗尽时自动续期 +500k（env `PI_LAMBOY_GOAL_EXTEND_STEP`）
+- **handoff 预算连续 + 自动续跑** — `/handoff` 切到新 session 时 goal 仍在同一进程；handoff 钩子把 token 预算 +800k（同公式、受 8M 总上限、不消耗 auto-renew 次数），token 耗尽的 goal 恢复 active，并把 goal entry 落盘到新 session；审阅后的 briefing 直接作为新会话首条 user message 提交，新会话**自动接着干**（env `PI_LAMBOY_HANDOFF_AUTOSUBMIT=0` 退回「预填 + 等回车」）；turn/wall-clock 耗尽不恢复（env `PI_LAMBOY_HANDOFF_GOAL_RENEW=0` 关闭）
 - **Goal Queue** — FIFO + high/normal 优先级 + auto-switch + prioritize/drop/skip
 - **持久化** — appendEntry + session_start 恢复；计数按 goalId **单调合并**（max），过期 entry 不会把轮次/token 拉回过去；`clear()` 写入墓碑 entry，完成的目标不会复活
 - **Context 注入** — `<untrusted_objective>` 标签注入 system prompt
@@ -120,7 +120,7 @@ pi                                                      # 重启 pi，然后试�
 
 ### Session handoff（会话交接）
 - **交接而非压缩** — 不做有损 compaction，而是提取关键上下文并开一个专注的新会话；新会话头部自动记录 parent，交接 prompt 附带旧 transcript（JSONL）路径供原文回查
-- **`/handoff <goal>`** — 一次独立的摘要模型调用（可中止）把整段对话变成自包含的交接 briefing；你在编辑器里审阅/修改后才开新会话（预填该 prompt）
+- **`/handoff <goal>`** — 一次独立的摘要模型调用（可中止）把整段对话变成自包含的交接 briefing；你在编辑器里审阅/修改后，briefing 直接作为新会话首条 user message 提交（自动续跑；`PI_LAMBOY_HANDOFF_AUTOSUBMIT=0` 退回旧的「预填 + 等回车」）
 - **`handoff` 工具** — 由持有全部上下文的 agent 自己写 briefing；草稿存为自定义条目（不进 LLM 上下文），turn 结束后编辑器预填 `/handoff`，一键确认；命令流程直接复用草稿不再重新生成
 - **Context guard** — 90% 用量时（每会话一次，`turn_end`）询问是否交接；确认则预填 `/handoff `，拒绝则本会话抑制（reload 后仍生效）
 - **压缩感知切片** — 摘要调用看到的与 LLM 一致：无 compaction → 全分支；`firstKeptEntryId`（旧式）→ summary + 保留切片；`retainedTail`（新式自包含检查点）→ summary + 物化尾部

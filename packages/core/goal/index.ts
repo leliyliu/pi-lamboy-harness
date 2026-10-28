@@ -2,7 +2,7 @@
 // Goal System — lifecycle + persistence + injection
 // ============================================================
 
-import type { GoalSnapshot, GoalStatus, GoalActor, GoalBudgetLimits } from "./types.ts";
+import type { GoalSnapshot, GoalStatus, GoalActor, GoalBudgetLimits, AutoRenewInfo } from "./types.ts";
 import { goalState, setCurrentGoal, GOAL_ENTRY_TYPE, GOAL_LIMITED_ALLOWED_TOOLS, GOAL_LIMITED_ALLOWED_TOOLS_LABEL } from "./types.ts";
 import { computeBudgetReport, budgetBandGuidance, liveWallClockMs } from "./budget.ts";
 import { goalToEntryData, goalFromEntryData, reconstructGoalFromEntries } from "./persistence.ts";
@@ -333,7 +333,7 @@ export class GoalManager {
    * (same cap as B3); `autoExtendedTo` then carries the new budget for the
    * caller's notify, and crossedBudget is false (the goal didn't stop).
    */
-  recordTurn(tokens: number, actor: GoalActor = "runtime"): { crossedBudget: boolean; autoExtendedTo?: number; autoRenewed?: { budget: number; count: number } } {
+  recordTurn(tokens: number, actor: GoalActor = "runtime"): { crossedBudget: boolean; autoExtendedTo?: number; autoRenewed?: AutoRenewInfo } {
     const g = goalState.current;
     if (!g || g.status !== "active") return { crossedBudget: false };
 
@@ -344,8 +344,25 @@ export class GoalManager {
     const newTurns = g.turnsUsed + 1;
     const newWallClockMs = g.wallClockMs + deltaMs;
 
+    // C1 (2026-10-28): proactive headroom top-up happens BEFORE the crossing
+    // check — the goal gains budget at the warn tier instead of being parked
+    // exactly when it hits 100%. `autoExtend` goals keep their legacy
+    // crossing-only extension (one extension mechanism per goal).
+    // Finding (review of C1): a simultaneous turn/wall-clock crossing stops the
+    // goal regardless of tokens, so spending a renewal there would be dead
+    // weight — decide that first, exactly like the token crossing path below.
+    const preLimits = g.budgetLimits ?? {};
+    const turnOrWallCrossed =
+      (preLimits.turnBudget !== undefined && preLimits.turnBudget > 0 && newTurns >= preLimits.turnBudget) ||
+      (preLimits.wallClockBudgetMs !== undefined && preLimits.wallClockBudgetMs > 0 && newWallClockMs >= preLimits.wallClockBudgetMs);
+    const headroom = g.autoExtend === true || turnOrWallCrossed
+      ? undefined
+      : this.headroomTopUp(newTokens);
+
     // Check all three budget types
-    const limits = g.budgetLimits ?? {};
+    const limits = headroom
+      ? { ...preLimits, tokenBudget: headroom.budget }
+      : preLimits;
     const crossedTokens = limits.tokenBudget !== undefined && limits.tokenBudget > 0 && newTokens >= limits.tokenBudget;
     const crossedTurns = limits.turnBudget !== undefined && limits.turnBudget > 0 && newTurns >= limits.turnBudget;
     const crossedWallClock = limits.wallClockBudgetMs !== undefined && limits.wallClockBudgetMs > 0 && newWallClockMs >= limits.wallClockBudgetMs;
@@ -354,10 +371,10 @@ export class GoalManager {
     let newStatus: GoalStatus = g.status;
     let terminalReason = crossed ? "Budget exceeded" : g.terminalReason;
     let autoExtendedTo: number | undefined;
-    let autoRenewed: { budget: number; count: number } | undefined;
+    let autoRenewed: AutoRenewInfo | undefined;
     let newLimits = limits;
     let topUps = g.topUps;
-    let autoRenewals = g.autoRenewals ?? 0;
+    let autoRenewals = headroom ? headroom.count : g.autoRenewals ?? 0;
 
     if (crossed) {
       const max = this.topUpMax();
@@ -393,7 +410,7 @@ export class GoalManager {
           autoExtendedTo = next;
           newLimits = { ...limits, tokenBudget: next };
           autoRenewals += 1;
-          autoRenewed = { budget: next, count: autoRenewals };
+          autoRenewed = { budget: next, count: autoRenewals, reason: "crossing" };
           terminalReason = g.terminalReason;
         } else {
           // Total budget cap reached — stop exactly like the old path.
@@ -401,6 +418,14 @@ export class GoalManager {
           terminalReason = "Budget exceeded";
         }
       }
+    }
+
+    if (headroom) {
+      // Pre-paid: the budget was raised above this turn's usage, so nothing
+      // crosses. Report it through the same fields so the UI/notify path is
+      // shared with the crossing renewal.
+      autoExtendedTo = headroom.budget;
+      autoRenewed = { ...headroom, reason: "headroom" };
     }
 
     setCurrentGoal(cloneSnapshot(g, this.withActor({
@@ -433,7 +458,7 @@ export class GoalManager {
    * counter moves in this path.
    * Silent persist (no UI update); the caller refreshes the badge.
    */
-  recordTokenUsage(delta: number): { crossedBudget: boolean; autoExtendedTo?: number; autoRenewed?: { budget: number; count: number } } {
+  recordTokenUsage(delta: number): { crossedBudget: boolean; autoExtendedTo?: number; autoRenewed?: AutoRenewInfo } {
     const g = goalState.current;
     // Finding 1 fix (review 2026-10-19): also accumulate while budget_limited —
     // the same turn's parent msg may have just crossed the budget (turn_end
@@ -446,14 +471,26 @@ export class GoalManager {
     const accumulating = g.status === "active";
 
     const newTokens = g.tokensUsed + Math.max(0, delta);
-    const limits = g.budgetLimits ?? {};
+    // C1 (2026-10-28): same proactive headroom policy as recordTurn, so a
+    // delegated-token spike gains budget before it becomes a crossing. Skipped
+    // when a turn/wall-clock budget already stops the goal (tokens can't fix it).
+    const preLimits = g.budgetLimits ?? {};
+    const turnOrWallExhausted =
+      (preLimits.turnBudget !== undefined && preLimits.turnBudget > 0 && g.turnsUsed >= preLimits.turnBudget) ||
+      (preLimits.wallClockBudgetMs !== undefined && preLimits.wallClockBudgetMs > 0 && liveWallClockMs(g) >= preLimits.wallClockBudgetMs);
+    const headroom = accumulating && g.autoExtend !== true && !turnOrWallExhausted
+      ? this.headroomTopUp(newTokens)
+      : undefined;
+    const limits = headroom
+      ? { ...preLimits, tokenBudget: headroom.budget }
+      : preLimits;
     const crossedTokens = limits.tokenBudget !== undefined && limits.tokenBudget > 0 && newTokens >= limits.tokenBudget;
 
     let autoExtendedTo: number | undefined;
-    let autoRenewed: { budget: number; count: number } | undefined;
+    let autoRenewed: AutoRenewInfo | undefined;
     let newLimits = limits;
     let topUps = g.topUps;
-    let autoRenewals = g.autoRenewals ?? 0;
+    let autoRenewals = headroom ? headroom.count : g.autoRenewals ?? 0;
     let status: GoalStatus | undefined;
     let terminalReason: string | undefined;
 
@@ -472,7 +509,7 @@ export class GoalManager {
           autoExtendedTo = next;
           newLimits = { ...limits, tokenBudget: next };
           autoRenewals += 1;
-          autoRenewed = { budget: next, count: autoRenewals };
+          autoRenewed = { budget: next, count: autoRenewals, reason: "crossing" };
         } else {
           status = "budget_limited";
           terminalReason = "Budget exceeded";
@@ -481,6 +518,11 @@ export class GoalManager {
         status = "budget_limited";
         terminalReason = "Budget exceeded";
       }
+    }
+
+    if (headroom) {
+      autoExtendedTo = headroom.budget;
+      autoRenewed = { ...headroom, reason: "headroom" };
     }
 
     setCurrentGoal(cloneSnapshot(g, {
@@ -664,6 +706,96 @@ export class GoalManager {
     return cap > 0 ? Math.min(next, cap) : next;
   }
 
+  // ── 2026-10-28 proactive headroom top-up (C1) ───────────────────────
+
+  /**
+   * Headroom tier in percent: PI_LAMBOY_GOAL_TOPUP_AT (default 80, 0 or
+   * out-of-range disables). At/above this share of the token budget the
+   * runtime raises the budget BEFORE the crossing, so the goal never parks.
+   */
+  private topUpAtPct(): number {
+    const raw = process.env.PI_LAMBOY_GOAL_TOPUP_AT;
+    if (raw === undefined) return 80;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 && n < 100 ? n : 0;
+  }
+
+  /**
+   * C1: should this usage level get a pre-exhaustion top-up, and to what?
+   * Pure: mutates nothing (callers apply the returned budget). Same caps as
+   * the crossing renewal (autoRenewMax / PI_LAMBOY_GOAL_MAX_TOKENS), so the
+   * two paths cannot bypass each other's limits.
+   */
+  private headroomTopUp(used: number): { budget: number; count: number } | undefined {
+    const g = goalState.current;
+    if (!g) return undefined;
+    const budget = g.budgetLimits?.tokenBudget;
+    if (budget === undefined || budget <= 0) return undefined;
+    const pct = this.topUpAtPct();
+    if (pct <= 0) return undefined;
+    if (used * 100 < budget * pct) return undefined;
+    const renewals = g.autoRenewals ?? 0;
+    if (!this.canAutoRenew(renewals)) return undefined;
+    const next = this.autoRenewBudget(used);
+    if (next === undefined || next <= budget) return undefined;
+    return { budget: next, count: renewals + 1 };
+  }
+
+  /**
+   * C2 (2026-10-28): re-entry renewal — rescue a goal that is ALREADY over
+   * its token budget (restored from a previous session/process, or renewed
+   * once too late) instead of leaving it parked in budget_limited until the
+   * user runs `/goal resume`.
+   *
+   * Called by the extension on every `context` event (before injection), so
+   * a restored budget_limited goal is active again on the very first model
+   * request. Only token overage qualifies: turn/wall-clock budgets are
+   * cumulative across sessions, so adding tokens cannot help those.
+   */
+  autoRecoverBudget(
+    actor: GoalActor = "runtime",
+  ): { extended: boolean; newBudget: number; count: number; resumed: boolean } | null {
+    const g = goalState.current;
+    if (!g || (g.status !== "active" && g.status !== "budget_limited")) return null;
+    const budget = g.budgetLimits?.tokenBudget;
+    if (budget === undefined || budget <= 0) return null;
+
+    const turnWallExhausted =
+      (g.budgetLimits?.turnBudget !== undefined && g.turnsUsed >= g.budgetLimits.turnBudget) ||
+      (g.budgetLimits?.wallClockBudgetMs !== undefined &&
+        liveWallClockMs(g) >= g.budgetLimits.wallClockBudgetMs);
+    if (turnWallExhausted) return null;
+
+    const renewals = g.autoRenewals ?? 0;
+    const wasLimited = g.status === "budget_limited";
+    const overBudget = g.tokensUsed >= budget;
+
+    // Limited but not over its token budget (e.g. the user raised the budget
+    // without resuming): nothing to extend, just lift the gate.
+    if (!overBudget) {
+      if (!wasLimited) return null;
+      const resumed = this.resume(actor);
+      if (!resumed) return null;
+      return { extended: false, newBudget: budget, count: renewals, resumed: true };
+    }
+
+    if (!this.canAutoRenew(renewals)) return null;
+    const next = this.autoRenewBudget(g.tokensUsed);
+    if (next === undefined || next <= budget) return null;
+
+    const patch: Partial<GoalSnapshot> = {
+      budgetLimits: { ...g.budgetLimits, tokenBudget: next },
+      autoRenewals: renewals + 1,
+      status: "active" as GoalStatus,
+      wallClockResumedAt: Date.now(),
+      terminalReason: undefined,
+    };
+    const updated = cloneSnapshot(g, this.withActor(patch, actor));
+    setCurrentGoal(updated);
+    this.persist();
+    return { extended: true, newBudget: next, count: renewals + 1, resumed: wasLimited };
+  }
+
   /** B3: public read-only accessor for UI copy (/goal resume notify). */
   topUpMaxForDisplay(): number | null {
     const max = this.topUpMax();
@@ -800,29 +932,31 @@ export class GoalManager {
   }
 
   /**
-   * B1 (spec §3): wrap-up for budget_limited — the exhausted turn MUST first
-   * park a handoff briefing (the handoff tool is whitelisted in
-   * shouldBlockTool and the tool_call gate), so the user can continue via
-   * /handoff in one keystroke. The draft flow already exists in 85-handoff.ts
-   * (HANDOFF_DRAFT_TYPE entry → turn_end editor prefill → /handoff review).
+   * B1 (spec §3) / C3 (2026-10-28): wrap-up for budget_limited.
    *
-   * Wording style: explicit whitelist + immediate actionable instruction — the
-   * pattern validated by the usage_limited fix (quant02 2026-09-16); the old
-   * "You MUST NOT use any tools" blanket ban also suppressed the handoff tool,
-   * which is exactly why an exhausted goal could not hand off.
+   * History: the 2026-10-19 design assumed exhaustion always needed a handoff,
+   * so this text ordered "call the handoff tool NOW". The 2026-10-26 runtime
+   * auto-renew made that obsolete — a handoff cannot add budget (the budget is
+   * per goal and follows the session), so parking a briefing was pure loss:
+   * the user was forced into /handoff while the runtime could have continued.
+   * The wrap-up now asks for a short status report only; recovery is
+   * automatic once the budget covers usage (autoRecoverBudget).
    */
   private buildBudgetLimitedWrapUp(statusLabel: string): string {
     return [
       `⚠️ ${statusLabel}. Allowed tools right now: ${GOAL_LIMITED_ALLOWED_TOOLS_LABEL} (nothing else).`,
       ``,
-      `1. Call the handoff tool NOW with a complete self-contained briefing:`,
-      `   - context & decisions so far`,
-      `   - files involved (paths)`,
-      `   - the goal's objective & completion criterion, remaining work, suggested next budget`,
-      `   The briefing is the only thing the next session sees.`,
-      `2. Then give a 2-3 line wrap-up. Do NOT continue goal work inline.`,
+      `This is the automatic-renewal hard stop: the goal hit the total token cap ` +
+        `(PI_LAMBOY_GOAL_MAX_TOKENS / PI_LAMBOY_GOAL_AUTORENEW_MAX), or auto-renewal is disabled ` +
+        `(PI_LAMBOY_GOAL_AUTORENEW=0). A handoff does NOT add budget — the budget belongs to the ` +
+        `goal and travels with it — so do not write a handoff briefing for budget reasons.`,
       ``,
-      `The user continues via /handoff (one keystroke) — the draft you write now is what they get.`,
+      `Do this now:`,
+      `1. Give a 2-3 line wrap-up: what is done, what remains, and the token budget the rest needs.`,
+      `2. Stop tool-heavy goal work.`,
+      ``,
+      `The user unblocks it with set_goal_budget (or /goal resume); once the budget covers usage ` +
+        `the runtime resumes the goal automatically, so no handoff is needed to continue.`,
     ].join("\n");
   }
 
@@ -839,9 +973,10 @@ export class GoalManager {
    * goal for 6+ rounds even when the user pasted the exact command
    * (quant02 incident, session 2026-09-16T02-40-50).
    *
-   * budget_limited (user tokenBudget) now instructs the model to write the
-   * handoff briefing first (B1, spec §3) — renewal stays reserved for the
-   * user: /goal resume auto-tops-up (B3), set_goal_budget raises explicitly.
+   * budget_limited (user tokenBudget) is normally rescued automatically by
+   * the runtime (auto-renew at the warn tier / autoRecoverBudget on entry);
+   * this text only appears at the hard total cap, where it asks for a short
+   * wrap-up instead of a handoff (C3, 2026-10-28).
    */
   buildWrapUpInjection(): string | undefined {
     const g = goalState.current;
