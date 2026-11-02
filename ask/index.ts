@@ -28,18 +28,34 @@ import {
   type QuestionSpec,
 } from "../packages/core/ask/types";
 import { emitAttention } from "../packages/core/attention/index.ts";
+import { resolveWorkspaceLabel } from "../packages/core/workspace/index.ts";
+import { permissionManager } from "../packages/core/permission/index.ts";
+import { approvalTimeoutFor, formatDuration, loadApprovalTimeoutConfig } from "../packages/core/permission/timeout.ts";
 import { QuestionDialogComponent, type QuestionsDialogResult } from "./dialog";
+
+/** Idle-timeout options for the shared dialog. */
+export interface ShowQuestionsOptions {
+  /** Auto-continue window (undefined = block until the user answers). */
+  timeoutMs?: number;
+  /** Countdown wording after "until ". */
+  countdownLabel?: string;
+}
 
 /** Run the tabbed dialog over all questions; undefined = no UI available. */
 export async function showQuestionsDialog(
   ctx: any,
   specs: QuestionSpec[],
+  opts?: ShowQuestionsOptions,
 ): Promise<QuestionsDialogResult | undefined> {
   if (!ctx?.hasUI || !ctx?.ui?.custom || specs.length === 0) return undefined;
   try {
     return await ctx.ui.custom(
-      (_tui: any, theme: any, _kb: any, done: (r: QuestionsDialogResult) => void) =>
-        new QuestionDialogComponent(specs, theme, done),
+      (tui: any, theme: any, _kb: any, done: (r: QuestionsDialogResult) => void) =>
+        new QuestionDialogComponent(specs, theme, done, {
+          timeoutMs: opts?.timeoutMs,
+          countdownLabel: opts?.countdownLabel,
+          tui,
+        }),
     );
   } catch {
     return undefined;
@@ -51,11 +67,23 @@ export async function showQuestionsDialog(
  * path); undefined = cancelled/no UI.
  */
 export async function showQuestionDialog(ctx: any, spec: QuestionSpec): Promise<string | undefined> {
-  const result = await showQuestionsDialog(ctx, [spec]);
-  if (!result || result.cancelled) return undefined;
+  const outcome = await showQuestionDialogOutcome(ctx, spec);
+  return outcome.choice;
+}
+
+/** Full outcome — keeps "nobody answered (timeout)" distinguishable from Esc. */
+export async function showQuestionDialogOutcome(
+  ctx: any,
+  spec: QuestionSpec,
+  opts?: ShowQuestionsOptions,
+): Promise<{ choice: string | undefined; timedOut: boolean; unavailable: boolean }> {
+  const result = await showQuestionsDialog(ctx, [spec], opts);
+  if (!result) return { choice: undefined, timedOut: false, unavailable: true };
+  if (result.timedOut) return { choice: undefined, timedOut: true, unavailable: false };
+  if (result.cancelled) return { choice: undefined, timedOut: false, unavailable: false };
   const answer = result.states[0]?.answer();
-  if (answer === undefined) return undefined;
-  return Array.isArray(answer) ? answer.join(", ") : answer;
+  const choice = answer === undefined ? undefined : Array.isArray(answer) ? answer.join(", ") : answer;
+  return { choice, timedOut: false, unavailable: false };
 }
 
 /** Render questions + options as plain text (no-UI fallback). */
@@ -180,15 +208,45 @@ export function registerAskUserQuestion(pi: any): void {
         kind: "ask",
         title: "❓ 需要你回答",
         body: questions[0]?.question ?? "",
+        // Which Paseo workspace is blocked (packages/core/workspace).
+        workspace: resolveWorkspaceLabel(ctx?.cwd),
         mode: ctx?.mode,
       });
 
-      const result = await showQuestionsDialog(ctx, questions);
+      // cwd-scoped config: a project `.pi/permissions.json` may shorten the window.
+      const timeoutMs = approvalTimeoutFor(
+        "ask",
+        permissionManager.getMode(),
+        loadApprovalTimeoutConfig(ctx?.cwd),
+      );
+      const result = await showQuestionsDialog(ctx, questions, {
+        timeoutMs,
+        countdownLabel: "auto-continue (no input)",
+      });
       if (!result) {
         // Dialog unavailable despite hasUI (custom() threw) — fall back to text.
         return { content: [{ type: "text", text: questionsAsText(questions) }] };
       }
       const answered = collectAnswers(questions, result);
+      if (result.timedOut) {
+        // Nobody answered: unblock the agent instead of stalling the run.
+        // Keep whatever was already answered before the clock ran out.
+        const answeredSoFar = answered.filter((a) => a.answer !== undefined || a.kind === "chat");
+        const partial = answeredSoFar.length > 0
+          ? `${formatAnswers(answeredSoFar)}\n\n(answered before the timeout — the rest were never answered)\n\n`
+          : "";
+        return {
+          content: [{
+            type: "text",
+            text:
+              `${partial}No answer within ${formatDuration(timeoutMs ?? 0)} — the dialog timed out (the user was away).\n` +
+              `Decide yourself: make a reasonable choice, continue the task, and state in your final reply ` +
+              `that the decision was made without user input.\n\n` +
+              questionsAsText(questions),
+          }],
+          details: { ...answersEnvelope(questions, result, answered), timedOut: true },
+        };
+      }
       const suffix = result.cancelled ? "\n\n(user cancelled the dialog)" : "";
       return {
         content: [{ type: "text", text: formatAnswers(answered) + suffix }],

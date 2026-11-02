@@ -41,6 +41,14 @@ export interface AttentionRequest {
   title: string;
   body: string;
   /**
+   * Human label for the workspace the blocked call belongs to
+   * ("pi-lamboy-harness" / "policy-optimization · 短文桶驱逐策略优化").
+   * Filled by the caller from its own cwd (packages/core/workspace); the
+   * notifier renders it next to the title so several concurrent Paseo
+   * workspaces stay distinguishable. Omitted = render exactly as before.
+   */
+  workspace?: string;
+  /**
    * Host mode from the pi ctx (e.g. "tui" | "rpc"). Only "tui" (or an
    * omitted mode, for callers without a ctx) is delivered — headless/RPC
    * hosts and pipes must stay silent.

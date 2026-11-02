@@ -15,6 +15,7 @@
 // ============================================================
 
 import type { ApprovalDialogResult } from './index.ts';
+import { formatDuration, runDialogWithTimeout } from './timeout.ts';
 
 /** Minimal extension UI surface the fallback needs (subset of pi's
  * ExtensionUIContext — the full ctx type isn't part of the peer dep's
@@ -29,6 +30,11 @@ export interface ApprovalDialogCtx {
   };
 }
 
+export interface ApprovalRpcOptions {
+  /** Idle timeout: nobody answered within this window → allow once. */
+  timeoutMs?: number;
+}
+
 /**
  * Approval dialog for hosts without ctx.ui.custom (pi RPC mode). `title`
  * may already carry a composed prompt (e.g. the tool action title).
@@ -38,20 +44,29 @@ export async function approvalViaRpcUi(
   toolName: string,
   title: string,
   message: string,
+  opts?: ApprovalRpcOptions,
 ): Promise<ApprovalDialogResult> {
   const ui = dialogCtx?.ui;
-  const prompt = `${title}: ${message}`;
+  const timeoutMs = opts?.timeoutMs;
+  // One window per approval, not per re-opened prompt: a Deny→reason→back
+  // loop must not restart the clock (the dialog always opens at once).
+  const deadline = timeoutMs && timeoutMs > 0 ? Date.now() + timeoutMs : undefined;
+  const remainingMs = () => (deadline ? Math.max(1, deadline - Date.now()) : undefined);
+  const hint = timeoutMs ? `\n\n⏰ ${formatDuration(timeoutMs)} 无操作 → 自动放行（仅本次）` : '';
+  const prompt = `${title}: ${message}${hint}`;
 
   // select() unavailable → boolean confirm as a last resort
   if (!ui || typeof ui.select !== 'function') {
-    try {
-      const ok = ui && typeof ui.confirm === 'function'
-        ? await ui.confirm(prompt, `Tool: ${toolName}`, { signal: dialogCtx?.signal })
-        : false;
-      return ok ? { decision: 'once' } : { decision: 'deny' };
-    } catch {
-      return { decision: 'deny' };
-    }
+    const confirmed = await runDialogWithTimeout(
+      (dialogOpts) => (ui && typeof ui.confirm === 'function'
+        ? ui.confirm(prompt, `Tool: ${toolName}`, { signal: dialogOpts.signal })
+        : Promise.resolve(false)),
+      remainingMs(),
+      dialogCtx?.signal,
+    );
+    // confirm() answers false on abort — a timeout is `aborted`, not `undefined`.
+    if (confirmed.aborted && confirmed.value !== true) return { decision: 'once', timedOut: true };
+    return confirmed.value ? { decision: 'once' } : { decision: 'deny' };
   }
 
   const options = [
@@ -61,13 +76,13 @@ export async function approvalViaRpcUi(
     'Deny with reason',
   ];
   while (true) {
-    let choice: string | undefined;
-    try {
-      choice = await ui.select(prompt, options, { signal: dialogCtx?.signal });
-    } catch {
-      // select threw (host-side failure) — fail-safe deny
-      return { decision: 'deny' };
-    }
+    const picked = await runDialogWithTimeout(
+      (dialogOpts) => ui.select!(prompt, options, { signal: dialogOpts.signal }),
+      remainingMs(),
+      dialogCtx?.signal,
+    );
+    if (picked.timedOut) return { decision: 'once', timedOut: true };
+    const choice = picked.value;
     if (choice === 'Allow once') return { decision: 'once' };
     if (choice === 'Always allow (this session)') return { decision: 'always' };
     if (choice === 'Deny with reason') {

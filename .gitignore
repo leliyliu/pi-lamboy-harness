@@ -11,7 +11,9 @@ Thumbs.db
 
 # joyspace skill: headless Chrome profile (login state) & screenshot artifacts
 personal/skills/joyspace-md-import/.userdata/
+personal/skills/joyspace-md-import/scripts/.userdata/
 personal/skills/joyspace-md-import/*.png
+personal/skills/joyspace-md-import/scripts/*.png
 
 # perf-lab benchmark results
 .perf/

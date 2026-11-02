@@ -136,7 +136,8 @@ check("plan: prefix 'c' → clear only",
 check("mode: auto/yolo/manual (+status) present",
   (() => {
     const v = completions.modeArgumentCompletions("").map((i) => i.value);
-    return v.includes("auto") && v.includes("yolo") && v.includes("manual");
+    return v.includes("auto") && v.includes("yolo") && v.includes("manual")
+      && v.includes("timeout") && v.includes("status");
   })());
 check("mode: prefix 'y' → yolo only",
   (() => {
@@ -144,7 +145,7 @@ check("mode: prefix 'y' → yolo only",
     return v.length === 1 && v[0] === "yolo";
   })());
 check("mode: no-match falls back to full list",
-  completions.modeArgumentCompletions("zzz").length === 4);
+  completions.modeArgumentCompletions("zzz").length === 5);
 
 // ══════════════════════════════════════════════════════════════
 // 4. Spinner styles (harness-branded, PI_LAMBOY_SPINNER)

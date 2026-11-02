@@ -182,7 +182,8 @@ const MODE_SUBCOMMANDS: CompletionItem[] = [
   { value: "auto", label: "auto", description: "Auto-approve all (disable ask_user_question)" },
   { value: "yolo", label: "yolo", description: "Approve after safety checks" },
   { value: "manual", label: "manual", description: "Require approval for all actions" },
-  { value: "status", label: "status", description: "Show current mode" },
+  { value: "timeout", label: "timeout", description: "Idle timeout for blocking panels (off/reset/5m/90s)" },
+  { value: "status", label: "status", description: "Show current mode + idle timeout" },
 ];
 
 export function modeArgumentCompletions(prefix: string): CompletionItem[] | null {

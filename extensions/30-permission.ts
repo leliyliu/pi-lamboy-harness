@@ -14,7 +14,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { permissionManager, approvalViaRpcUi } from "../packages/core/permission";
 import { registerPermissionCommands } from "../packages/core/permission/commands";
-import { showQuestionDialog } from "../ask/index";
+import { formatDuration } from "../packages/core/permission/timeout.ts";
+import { showQuestionDialogOutcome } from "../ask/index";
 import { approvalTitleFor } from "../packages/core/ask/types";
 import { setAttentionBus } from "../packages/core/attention/index.ts";
 
@@ -38,24 +39,51 @@ export default function (pi: ExtensionAPI) {
   // there and every `ask` verdict would be silently denied. Route those
   // through the extension UI protocol primitives (select/input/confirm),
   // which RPC hosts implement.
-  permissionManager.setApprovalDialog(async (dialogCtx, toolName, title, message) => {
+  //
+  // Idle timeout (yolo/auto only, see packages/core/permission/timeout.ts):
+  // the panel counts down and closes as `timedOut`, which we turn into an
+  // allow-once. Esc still denies — only the timer sets timedOut.
+  permissionManager.setApprovalDialog(async (dialogCtx, toolName, title, message, opts) => {
+    const timeoutMs = opts?.timeoutMs;
+    // Workspace identity (packages/core/workspace): several Paseo workspaces
+    // can be blocked on an approval at once, so the prompt must say which one.
+    const actionTitle = approvalTitleFor(toolName);
+    const workspace = opts?.workspace;
+    const workspaceLine = workspace
+      ? `📍 ${workspace}${opts?.cwd ? ` · ${opts.cwd}` : ""}`
+      : undefined;
     if (dialogCtx?.mode !== "tui") {
-      return approvalViaRpcUi(dialogCtx, toolName, `${approvalTitleFor(toolName)}\n${title}`, message);
+      const rpcTitle = workspace ? `${actionTitle} · ${workspace}\n${title}` : `${actionTitle}\n${title}`;
+      return approvalViaRpcUi(dialogCtx, toolName, rpcTitle, message, { timeoutMs });
     }
 
     // Loop so Esc in the "Deny with reason" input returns to the options
     // (the same pattern the plan approval panel uses for its Revise input)
     // instead of ending the whole dialog with a bare deny.
     while (true) {
-      const choice = await showQuestionDialog(dialogCtx, {
-        question: `${approvalTitleFor(toolName)}\n${title}: ${message}`,
-        options: [
-          { label: "Allow once", description: "Approve this call only" },
-          { label: "Always allow (this session)", description: "Record approval for the rest of the session" },
-          { label: "Deny", description: "Block this call" },
-          { label: "Deny with reason", description: "Block and tell the agent why" },
-        ],
-      });
+      const outcome = await showQuestionDialogOutcome(
+        dialogCtx,
+        {
+          question: `${actionTitle}\n${message}`,
+          // Dim line under the question: workspace label + the exact cwd.
+          body: workspaceLine,
+          options: [
+            { label: "Allow once", description: "Approve this call only" },
+            { label: "Always allow (this session)", description: "Record approval for the rest of the session" },
+            { label: "Deny", description: "Block this call" },
+            { label: "Deny with reason", description: "Block and tell the agent why" },
+          ],
+        },
+        {
+          timeoutMs,
+          countdownLabel: timeoutMs
+            ? `auto-allow (${formatDuration(timeoutMs)} idle)${opts?.isDestructive ? " — DESTRUCTIVE" : ""}`
+            : undefined,
+        },
+      );
+      if (outcome.timedOut) return { decision: "once", timedOut: true };
+
+      const choice = outcome.choice;
       if (choice === "Allow once") return { decision: "once" };
       if (choice === "Always allow (this session)") return { decision: "always" };
       if (choice === "Deny with reason") {

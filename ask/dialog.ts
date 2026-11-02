@@ -41,6 +41,8 @@ import {
   type MarkdownTheme,
 } from "@earendil-works/pi-tui";
 
+import { formatCountdown } from "../packages/core/permission/timeout.ts";
+
 import {
   AnswerState,
   bodyLines,
@@ -62,6 +64,22 @@ export interface QuestionsDialogResult {
   cancelled: boolean;
   /** Index of the question the user picked "Chat about this" on. */
   chatIndex?: number;
+  /**
+   * True when the idle timeout closed the dialog (nobody answered).
+   * Distinct from `cancelled` on purpose: a timeout may be auto-approved /
+   * auto-continued by the caller, an Esc must not be.
+   */
+  timedOut?: boolean;
+}
+
+/** Idle-timeout wiring for the dialog (see packages/core/permission/timeout.ts). */
+export interface QuestionsDialogOptions {
+  /** Close the dialog with `timedOut: true` after this many ms of no input. */
+  timeoutMs?: number;
+  /** Countdown wording: "4:32 until <label>" (default: auto-continue). */
+  countdownLabel?: string;
+  /** pi TUI handle — used to repaint the countdown once per second. */
+  tui?: { requestRender?: (force?: boolean) => void };
 }
 
 
@@ -170,14 +188,32 @@ export class QuestionDialogComponent extends Container {
   private readonly previewCache = new Map<string, { width: number; lines: string[] }>();
   /** Last render() width; layout decisions and the preview cache key off it. */
   private lastWidth = 0;
+  /** Idle-timeout deadline (epoch ms); undefined = this dialog never times out. */
+  private readonly deadline?: number;
+  private readonly countdownLabel: string;
+  private readonly requestRender?: (force?: boolean) => void;
+  private ticker?: ReturnType<typeof setInterval>;
+  /** Countdown row, re-created by rebuild() and ticked in place. */
+  private countdownText?: Text;
+  /** Guard against double completion (timeout racing a keypress). */
+  private finished = false;
 
   constructor(
     private readonly specs: QuestionSpec[],
     private readonly theme: any,
     onDone: (result: QuestionsDialogResult) => void,
+    opts?: QuestionsDialogOptions,
   ) {
     super();
     this.onDone = onDone;
+    this.countdownLabel = opts?.countdownLabel ?? "auto-continue";
+    this.requestRender = opts?.tui?.requestRender;
+    const timeoutMs = opts?.timeoutMs;
+    if (timeoutMs && timeoutMs > 0) {
+      this.deadline = Date.now() + timeoutMs;
+      this.ticker = setInterval(() => this.tick(), 1000);
+      (this.ticker as any)?.unref?.();
+    }
     this.states = specs.map((s) => new AnswerState(s));
     this.otherInput.onSubmit = (value) => this.commitOther(value);
     this.otherInput.onEscape = () => this.exitOtherEdit();
@@ -231,20 +267,62 @@ export class QuestionDialogComponent extends Container {
   }
 
   private cancel(): void {
-    this.onDone({ states: this.states, cancelled: true });
+    this.finish({ states: this.states, cancelled: true });
   }
 
   private submit(): void {
-    this.onDone({ states: this.states, cancelled: false });
+    this.finish({ states: this.states, cancelled: false });
   }
 
   /** "Chat about this" row picked: end the dialog, flag the question. */
   private chatAbout(): void {
-    this.onDone({
+    this.finish({
       states: this.states,
       cancelled: false,
       chatIndex: Math.min(this.tab, this.states.length - 1),
     });
+  }
+
+  /** Single completion gate: stops the countdown and never fires twice. */
+  private finish(result: QuestionsDialogResult): void {
+    if (this.finished) return;
+    this.finished = true;
+    this.stopTicker();
+    this.onDone(result);
+  }
+
+  private stopTicker(): void {
+    if (this.ticker) {
+      clearInterval(this.ticker);
+      this.ticker = undefined;
+    }
+  }
+
+  /** Countdown tick: refresh the row, close the dialog when time is up. */
+  private tick(): void {
+    if (this.finished || this.deadline === undefined) return;
+    const remaining = this.deadline - Date.now();
+    if (remaining <= 0) {
+      this.finish({ states: this.states, cancelled: false, timedOut: true });
+      return;
+    }
+    if (this.countdownText) {
+      this.countdownText.setText(this.countdownLine());
+    }
+    try {
+      this.requestRender?.(true);
+    } catch { /* repaint is best-effort */ }
+  }
+
+  private countdownLine(): string {
+    const remaining = Math.max(0, (this.deadline ?? Date.now()) - Date.now());
+    return this.theme.fg("warning", `⏰ ${formatCountdown(remaining)} until ${this.countdownLabel}`);
+  }
+
+  /** Host unmounts the dialog: never leave a ticker behind. */
+  dispose(): void {
+    this.finished = true;
+    this.stopTicker();
   }
 
   private gotoTab(target: number): void {
@@ -462,6 +540,10 @@ export class QuestionDialogComponent extends Container {
 
     this.body.addChild(new Spacer(1));
     this.body.addChild(new Text(theme.fg("dim", this.hintLine()), 1, 0));
+    if (this.deadline !== undefined) {
+      this.countdownText = new Text(this.countdownLine(), 1, 0);
+      this.body.addChild(this.countdownText);
+    }
   }
 
   /**
@@ -659,6 +741,10 @@ export class QuestionDialogComponent extends Container {
       theme.fg("dim", "Enter submit · ←/→ back to questions · Esc cancel"),
       1, 0,
     ));
+    if (this.deadline !== undefined) {
+      this.countdownText = new Text(this.countdownLine(), 1, 0);
+      this.body.addChild(this.countdownText);
+    }
   }
 
   /** Top tab strip: `1/3 · header` + per-question status + Submit. */

@@ -4,7 +4,9 @@
 
 import type { PlanManager } from "./index.ts";
 import { permissionManager } from "../permission/index.ts";
+import { approvalTimeoutFor, formatDuration, loadApprovalTimeoutConfig, runDialogWithTimeout, type TimedDialogResult } from "../permission/timeout.ts";
 import { emitAttention } from "../attention/index.ts";
+import { resolveWorkspaceLabel } from "../workspace/index.ts";
 import * as fs from "node:fs";
 
 /**
@@ -117,6 +119,7 @@ export function registerPlanTools(pi: any, planManager: PlanManager): void {
         kind: "plan",
         title: "📋 计划待审批",
         body: plan.path || "plan",
+        workspace: resolveWorkspaceLabel(ctx?.cwd),
         mode: ctx?.mode,
       });
       // Review cancelled / timed out (choice undefined/null): this is NOT a
@@ -131,6 +134,55 @@ export function registerPlanTools(pi: any, planManager: PlanManager): void {
             type: "text",
             text: "Plan review was not completed (cancelled or timed out). Plan mode is still active and your plan is preserved. Continue editing the plan, or call exit_plan_mode again when it is ready for review.",
           }],
+        };
+      };
+
+      // Idle timeout (yolo/auto only, see packages/core/permission/timeout.ts):
+      // nobody looked at the panel for N minutes → approve the plan instead of
+      // stalling the run. Mirrors the auto-mode path, but states loudly for both
+      // the user and the model that no human reviewed it.
+      const planTimeoutMs = approvalTimeoutFor(
+        "plan",
+        permissionManager.getMode(),
+        loadApprovalTimeoutConfig(ctx?.cwd),
+      );
+      const handleReviewTimeout = () => {
+        planManager.approvePlan();
+        clearPlanBadge();
+        const window = formatDuration(planTimeoutMs ?? 0);
+        ctx.ui.notify(`⏰ 计划审批 ${window} 无操作 — 已自动批准（未经人工审阅）`, "warning");
+        emitAttention({
+          kind: "plan",
+          title: "⏰ 计划超时自动批准",
+          body: plan.path || "plan",
+          workspace: resolveWorkspaceLabel(ctx?.cwd),
+          mode: ctx?.mode,
+        });
+        return {
+          content: [{
+            type: "text",
+            text: `Plan auto-approved after ${window} of no user response (idle timeout).\nThe user has NOT reviewed this plan. Follow the user's original instructions on whether to proceed; do NOT start editing source files unless the request explicitly asked for code changes.\n\nExecute the plan when the user confirms.`,
+          }],
+        };
+      };
+      // With a timeout configured, our own timer owns the dialog so that
+      // "nobody answered" (→ approve) stays distinguishable from Esc (→ cancel).
+      const selectPlanReview = async (title: string, options: string[]): Promise<TimedDialogResult<string>> => {
+        // pi's select has no countdown UI; surface the window in the prompt text
+        // so the user knows the panel can decide on its own.
+        const withHint = planTimeoutMs
+          ? `${title}\n\n⏰ ${formatDuration(planTimeoutMs)} 无操作 → 自动批准（未经人工审阅）`
+          : title;
+        if (planTimeoutMs) {
+          return runDialogWithTimeout<string>(
+            (opts) => ctx.ui.select(withHint, options, { signal: opts.signal }),
+            planTimeoutMs,
+          );
+        }
+        return {
+          value: (await ctx.ui.select(withHint, options, { timeout: 600000 })) ?? undefined,
+          timedOut: false,
+          aborted: false,
         };
       };
 
@@ -180,14 +232,15 @@ export function registerPlanTools(pi: any, planManager: PlanManager): void {
         notifyPlanReview();
         // Loop: select → revise input (Esc/empty → back to select)
         while (true) {
-          const choice = await ctx.ui.select(
+          const review = await selectPlanReview(
             `Plan Review:\n\n${planPreview}\n\nChoose an approach:`,
             allOptions,
-            { timeout: 600000 } // a human needs more than 60s to review a plan
           );
+          if (review.timedOut) return handleReviewTimeout();
+          const choice = review.value;
 
-          // Cancelled / timed out: preserve the plan, keep plan mode active.
-          if (choice === undefined || choice === null) {
+          // Cancelled (Esc): preserve the plan, keep plan mode active.
+          if (choice === undefined || (choice as any) === null) {
             return handleReviewCancelled();
           }
 
@@ -239,13 +292,11 @@ export function registerPlanTools(pi: any, planManager: PlanManager): void {
       notifyPlanReview();
       // Loop: select → revise input (Esc/empty → back to select)
       while (true) {
-        const choice = await ctx.ui.select(
-          `Plan Review:\n\n${planPreview}`,
-          options,
-          { timeout: 600000 } // a human needs more than 60s to review a plan
-        );
+        const review = await selectPlanReview(`Plan Review:\n\n${planPreview}`, options);
+        if (review.timedOut) return handleReviewTimeout();
+        const choice = review.value;
 
-        // Cancelled / timed out: preserve the plan, keep plan mode active.
+        // Cancelled (Esc): preserve the plan, keep plan mode active.
         if (choice === undefined || choice === null) {
           return handleReviewCancelled();
         }

@@ -85,6 +85,8 @@ bindBus();
   check("bus: payload kind", received[0]?.kind === "ask");
   check("bus: payload title", received[0]?.title === "❓ 需要你回答");
   check("bus: payload body", received[0]?.body === "Q?");
+  check("bus: workspace key omitted when unset (backward compatible)",
+    !("workspace" in (received[0] ?? {})), JSON.stringify(received[0]));
 }
 
 // ── 3. Fail-open: a throwing bus must never break the dialog ───────────────
@@ -143,6 +145,10 @@ attention.setAttentionBus(null);
 // ── 7. Permission ask branch emits exactly one approval event ──────────────
 process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), "attention-home-"));
 process.env.USERPROFILE = process.env.HOME;
+// Never inherit the developer's live Paseo env: the workspace label must come
+// from the fixtures this suite controls (and must not read real workspaces).
+delete process.env.PASEO_WORKSPACE_ID;
+delete process.env.PASEO_HOME;
 const cleanCwd = fs.mkdtempSync(path.join(os.tmpdir(), "attention-cwd-"));
 const { permissionManager } = loadTs(`${EXT}/packages/core/permission/index.ts`);
 permissionManager.setMode("manual");
@@ -160,6 +166,33 @@ permissionManager.setApprovalDialog(async () => ({ decision: "deny" }));
   check("permission ask: one approval event emitted", got.length === before + 1, JSON.stringify(got));
   check("permission ask: body names the tool", /bash/.test(got[before]?.body ?? ""), got[before]?.body);
   check("permission ask: title signals approval", /授权/.test(got[before]?.title ?? ""), got[before]?.title);
+  check("permission ask: workspace labels the cwd",
+    got[before]?.workspace === path.basename(cleanCwd), got[before]?.workspace);
+}
+
+// Paseo records that match the cwd → the popup names the Paseo project.
+{
+  const paseoHome = fs.mkdtempSync(path.join(os.tmpdir(), "attention-paseo-"));
+  fs.mkdirSync(path.join(paseoHome, "projects"), { recursive: true });
+  fs.writeFileSync(path.join(paseoHome, "projects", "workspaces.json"), JSON.stringify([
+    { workspaceId: "wks_test", projectId: "prj_test", cwd: cleanCwd, kind: "local_checkout",
+      displayName: "main", title: null, branch: "main", archivedAt: null },
+  ]));
+  fs.writeFileSync(path.join(paseoHome, "projects", "projects.json"), JSON.stringify([
+    { projectId: "prj_test", rootPath: cleanCwd, displayName: "attention-project" },
+  ]));
+  process.env.PASEO_HOME = paseoHome;
+  process.env.PASEO_WORKSPACE_ID = "wks_test";
+  bindBus();
+  const before = seen("approval").length;
+  await permissionManager.evaluate(
+    "bash", { command: "echo workspace-label-probe" }, cleanCwd,
+    { hasUI: true, mode: "tui", sessionId: "attention-session", ui: {} },
+  );
+  check("permission ask: workspace resolved from Paseo records",
+    seen("approval")[before]?.workspace === "attention-project", seen("approval")[before]?.workspace);
+  delete process.env.PASEO_HOME;
+  delete process.env.PASEO_WORKSPACE_ID;
 }
 
 // Non-interactive (no UI) deny path must NOT ask → no notification.
@@ -198,6 +231,7 @@ bindBus();
   const ctx = {
     hasUI: true,
     mode: "tui",
+    cwd: cleanCwd,
     ui: { custom: async () => ({ cancelled: true, states: [] }) },
   };
   const res = await askTool.execute("call-1", { question: "Which approach?", options: ["A", "B"] }, null, null, ctx);
@@ -205,6 +239,7 @@ bindBus();
   const got = seen("ask");
   check("ask: one ask event emitted", got.length === before + 1, JSON.stringify(got));
   check("ask: body carries the question", /Which approach\?/.test(got[before]?.body ?? ""), got[before]?.body);
+  check("ask: workspace labels the cwd", got[before]?.workspace === path.basename(cleanCwd), got[before]?.workspace);
 }
 
 // The shared dialog helper (reused by permission approval) must never emit —
@@ -241,6 +276,7 @@ bindBus();
 {
   const enterCtx = {
     mode: "tui",
+    cwd: cleanCwd,
     ui: { notify() {}, setStatus() {}, theme: { fg: (_c, s) => s } },
   };
   await tools.get("enter_plan_mode").execute("call-3", {}, null, null, enterCtx);
@@ -248,6 +284,7 @@ bindBus();
   const before = seen("plan").length;
   const reviewCtx = {
     mode: "tui",
+    cwd: cleanCwd,
     ui: {
       notify() {},
       setStatus() {},
@@ -261,6 +298,7 @@ bindBus();
   const got = seen("plan");
   check("plan: one plan event emitted", got.length === before + 1, JSON.stringify(got));
   check("plan: title signals review", /计划/.test(got[before]?.title ?? ""), got[before]?.title);
+  check("plan: workspace labels the cwd", got[before]?.workspace === path.basename(cleanCwd), got[before]?.workspace);
 }
 
 // Auto-approved plans skip the panel → no plan event.
@@ -279,7 +317,8 @@ bindBus();
 }
 
 // ── 10. personal notify extension subscribes to the attention channel ─────
-const notifyFactory = loadTs(`${EXT}/personal/extensions/notify.ts`).default;
+const notifyModule = loadTs(`${EXT}/personal/extensions/notify.ts`);
+const notifyFactory = notifyModule.default;
 {
   const subscriptions = [];
   const handlers = new Map();
@@ -289,6 +328,15 @@ const notifyFactory = loadTs(`${EXT}/personal/extensions/notify.ts`).default;
     on: (event, handler) => { handlers.set(event, handler); },
   };
   notifyFactory(fakePi);
+  // Title composition (pure): workspace suffix + backward-compatible default.
+  const compose = notifyModule.composeAttentionTitle;
+  check("notify: title carries the workspace",
+    compose({ title: "🔐 需要授权", workspace: "pi-lamboy-harness" }) === "🔐 需要授权 · pi-lamboy-harness",
+    compose({ title: "🔐 需要授权", workspace: "pi-lamboy-harness" }));
+  check("notify: title unchanged without a workspace",
+    compose({ title: "🔐 需要授权" }) === "🔐 需要授权");
+  check("notify: title bounded for the 348px popup",
+    compose({ title: "🔐 需要授权", workspace: "x".repeat(120) }).length <= 50);
   check("notify: subscribes to lamboy:attention",
     subscriptions.length === 1 && subscriptions[0]?.channel === "lamboy:attention",
     JSON.stringify(subscriptions.map((s) => s.channel)));

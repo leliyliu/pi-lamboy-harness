@@ -23,7 +23,9 @@
  *   - 计划审批（review 面板）  → 📋 计划待审批（Hero）
  * 后三类由 repo 侧 packages/core/attention 通过 pi.events 的
  * "lamboy:attention" 频道推送（跨扩展 EventBus；repo 每处 emit 前先
- * setAttentionBus(pi.events)）。本扩展只订阅，不 import repo 代码。
+ * setAttentionBus(pi.events)）。本扩展只订阅，不 import pi 宿主 API；
+ * 唯一允许的 repo 依赖是 packages/core/workspace 这类纯函数模块（无宿主
+ * import、永不抛），且调用处必须 try/catch 回落到路径名。
  *
  * headless（ctx.mode !== "tui"）全静默；PI_NOTIFY=0 一键禁用。
  * 调试日志 /tmp/pi-notify.log（PI_NOTIFY_DEBUG 可覆盖），行首带 pid；
@@ -37,6 +39,10 @@ import { appendFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+// Pure helper module (fs/path only, never throws, never imports the pi host):
+// shared with the repo's attention emitters so a permission popup and a
+// settled popup name the same workspace the same way.
+import { resolveWorkspace } from "../../packages/core/workspace/index.ts";
 
 const DEBUG_PATH = process.env.PI_NOTIFY_DEBUG || "/tmp/pi-notify.log";
 const DEBUG_VERBOSE = Boolean(process.env.PI_NOTIFY_DEBUG);
@@ -118,6 +124,28 @@ function truncate(text: string, limit = 140): string {
   return single.length <= limit ? single : `${single.slice(0, limit - 1)}…`;
 }
 
+/**
+ * 弹窗标题里的 workspace 标签（"项目" / "项目 · 标题" / 目录名）。
+ * resolver 自身 fail-safe，这里再兜一层：任何异常都回落 basename(cwd)，
+ * 通知永远不能因为 workspace 解析失败而哑掉。没有 cwd 时返回空串（保持
+ * 旧行为：settled 只显示裸 "pi"），不退化成 process.cwd()。
+ */
+function workspaceLabel(cwd: string | undefined): string {
+  if (!cwd) return "";
+  try {
+    return resolveWorkspace(cwd).label || basename(cwd);
+  } catch {
+    return basename(cwd);
+  }
+}
+
+/** Popup title for an attention event: "🔐 需要授权 · pi-lamboy-harness". */
+export function composeAttentionTitle(req: { title?: string; workspace?: string }): string {
+  const base = String(req.title ?? "pi");
+  const ws = truncate(String(req.workspace ?? ""), 40);
+  return truncate(ws ? `${base} · ${ws}` : base, 50);
+}
+
 function formatElapsed(ms: number): string | null {
   const s = Math.round(ms / 1000);
   if (s < 1) return null; // 亚秒级不展示，避免出现 "· 0s"
@@ -137,14 +165,17 @@ export default function (pi: ExtensionAPI) {
   // dialog flow; the inner try/catch only guards our own logging.
   const notifier = (payload: unknown) => {
     try {
-      const req = (payload ?? {}) as { kind?: string; title?: string; body?: string };
+      const req = (payload ?? {}) as { kind?: string; title?: string; body?: string; workspace?: string };
       const kind = String(req.kind ?? "ask");
       const style = ATTENTION_STYLE[kind] ?? ATTENTION_STYLE.ask;
       const sound = process.env[`PI_NOTIFY_SOUND_${kind.toUpperCase()}`] || style.sound;
       const body = truncate(String(req.body ?? ""));
-      debug(`attention kind=${kind} title=${req.title ?? ""} body=${truncate(body, 60)}`);
+      // Title carries the workspace: "🔐 需要授权 · pi-lamboy-harness".
+      // Missing workspace → exactly the old title (backward compatible).
+      const title = composeAttentionTitle(req);
+      debug(`attention kind=${kind} title=${title} body=${truncate(body, 60)}`);
       playSound(sound);
-      popup(style.popup, String(req.title ?? "pi"), body);
+      popup(style.popup, title, body);
     } catch (err: any) {
       debug(`attention notifier FAIL ${err?.message ?? err}`);
     }
@@ -179,7 +210,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("agent_settled", async (event: any, ctx: any) => {
     if (ctx?.mode && ctx.mode !== "tui") return; // headless/pipe 静默
     const elapsed = runStart ? formatElapsed(Date.now() - runStart) ?? "" : "";
-    const project = ctx?.cwd ? basename(ctx.cwd) : "";
+    const project = ctx?.cwd ? workspaceLabel(ctx.cwd) : "";
     const title = project ? `pi · ${project}` : "pi";
     debug(`settled mode=${ctx?.mode ?? "?"} aborted=${!!event?.aborted} err=${!!lastError} elapsed=${elapsed}`);
 
