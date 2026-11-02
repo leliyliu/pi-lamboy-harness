@@ -71,7 +71,7 @@ pi                                                      # 重启 pi，然后试�
 - **权限模型** — plan mode 不拦截 bash，bash 走正常的 permission mode（auto/yolo/manual）。只拦截 Write/Edit（非 plan 文件）
 - **Plan 文件路径匹配** — 精确路径、`local://` scheme 文件名、解析后绝对路径在 `sessionDir/plans/` 下，三种方式均支持
 - **ExitPlanMode 读盘** — 呈现时读取 plan 文件真实内容，与 LLM 写盘保持一致
-- **Revise 保留 plan** — 评审选 Revise 或取消会以同一个 plan 对象（id/路径/内容）重新进入 plan 模式，不困住用户、不丢工作；评审超时 600s
+- **Revise 保留 plan** — 评审选 Revise 或取消会以同一个 plan 对象（id/路径/内容）重新进入 plan 模式，不困住用户、不丢工作；评审超时 600s（启用空闲超时时改为 5 分钟无操作自动批准，模型会被告知该计划未经人工审阅）
 - **恢复校验** — 无内容且磁盘无文件的过期 active-plan entry 会停用 plan 模式，而不是静默困住会话
 - **Context 注入** — 注入 plan 到 system prompt
 
@@ -83,6 +83,7 @@ pi                                                      # 重启 pi，然后试�
 - **审批面板** — 编号对话框，按工具定制动作标题，数字键直选，四种结果：Allow once / Always allow（本会话）/ Deny / Deny with reason（理由回传给模型）。在 RPC 宿主（obsidian-pi 等）中，同样的四个选择走扩展 UI 协议（`select` / `input` / `confirm`）呈现，不再静默拒绝
 - **AGENTS.md 指令** — 项目级（最近的裸 `AGENTS.md`，向上遍历）→ 跨工具 `~/.agents/AGENTS.md`，聚合生效；`destructive-ask-always` 可将 ask 升级为 deny
 - **配置缓存** — 权限配置按文件 mtime 缓存，变更即时生效
+- **空闲超时自动放行（人不在时推进）** — 授权面板、`exit_plan_mode` 计划审批、`ask_user_question` 三类阻塞面板都会显示倒计时并在无人操作时自动推进：普通场景 **5 分钟**，destructive（`rm -rf` / `--force` / `git reset --hard` 等）**15 分钟**；默认只在 `yolo` + `auto` 生效，`manual` 始终等人。超时放行 = **Allow once**（绝不写入会话批准记忆），同时发 OS 级 attention 弹窗 + 警告 toast，并往模型上下文尾部注入一次 `⏰ Idle-timeout auto-approval (not reviewed by the user)`（附具体命令），让模型复核结果而不是当成用户同意。计划审批超时=自动批准（并标注未经人工审阅）；提问超时=告知模型自行决策。Esc 仍是 deny——只有自有计时器算超时。配置：`permissions.json` 的 `"approvalTimeout": { "enabled": true, "modes": ["yolo","auto"], "defaultMs": 300000, "destructiveMs": 900000 }`，env `PI_APPROVAL_TIMEOUT_MS` / `PI_DESTRUCTIVE_TIMEOUT_MS`，或会话内 `/mode timeout 5m|90s|off|reset`（`/mode status` 查看当前窗口）
 - **持久化启动模式** — 可选 `"defaultMode": "auto" | "yolo" | "manual"`（全局 `~/.pi/agent/permissions.json` 或项目 `.pi/permissions.json`，冲突时全局优先）替代硬编码的 `manual` 启动模式，新会话直接以偏好模式启动；有 `/mode` 历史的会话仍恢复上次模式，`defaultMode` 是全新会话的起点
 
 ### TUI 模块
@@ -153,7 +154,7 @@ pi                                                      # 重启 pi，然后试�
 | `/pause` | 冻结代理到下一个安全边界（esc/enter/space/ctrl+c 恢复） | `10-pause.ts` |
 | `/goal <objective>` | 设置目标 | `40-goal.ts` |
 | `/plan` | 进入/管理计划模式 | `20-plan.ts` |
-| `/mode` | 权限模式（auto/yolo/manual） | `30-permission.ts` |
+| `/mode` | 权限模式（auto/yolo/manual）+ `timeout 5m\|off\|reset`、`status` | `30-permission.ts` |
 | `/todo` | 任务计划（阶段模型）；子命令：`start` `done` `drop` `export` `import` `copy` `edit` `toggle` | `60-todo.ts` |
 | `/todo toggle` | 展开/折叠 todo 面板（替代原 `alt+t`） | `60-todo.ts` |
 | `/tui` | 编辑器样式/shimmer/timing 热切换 | `70-tui.ts` |

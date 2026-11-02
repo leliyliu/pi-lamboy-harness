@@ -93,6 +93,7 @@ All tools are model-callable, all commands are slash commands with Tab completio
 - **Approval panel** — numbered dialog with per-tool action titles ("Run this command?" / "Apply these edits?"), digit-key direct select, four outcomes: Allow once / Always allow (session) / Deny / Deny with reason (reason relayed to the model). In RPC hosts (obsidian-pi etc.) the same choices render over the extension UI protocol (`select` / `input` / `confirm`) instead of the TUI dialog — no more silent denials
 - **AGENTS.md hierarchy** — project (nearest `AGENTS.md`, walking up) → cross-tool `~/.agents/AGENTS.md`, aggregated; `destructive-ask-always` can upgrade ask to deny
 - **Config cache** — permission config cached by file mtime, edits take effect immediately
+- **Idle timeout (auto-continue when you're away)** — the approval panel, the `exit_plan_mode` review panel and `ask_user_question` all count down and unblock themselves when nobody answers: **5m** default, **15m** for destructive asks, `opt-in per mode` (default `yolo` + `auto`; `manual` always waits for a human). A timeout is an **allow-once** (never written into session approvals), raises an OS-level attention ping + a warning toast, and injects a one-shot `⏰ Idle-timeout auto-approval (not reviewed by the user)` block into the model's context so it re-checks the result instead of assuming consent. Plan review auto-approves on timeout (marked as unreviewed); `ask_user_question` tells the model to decide on its own. Esc still denies — only our own timer counts as a timeout. Config: `"approvalTimeout": { "enabled": true, "modes": ["yolo","auto"], "defaultMs": 300000, "destructiveMs": 900000 }` in `permissions.json`, env `PI_APPROVAL_TIMEOUT_MS` / `PI_DESTRUCTIVE_TIMEOUT_MS`, or `/mode timeout 5m|90s|off|reset` per session (`/mode status` shows the current window)
 - **Persistent startup mode** — optional `"defaultMode": "auto" | "yolo" | "manual"` in `~/.pi/agent/permissions.json` (global) or `.pi/permissions.json` (project; global wins on conflict) replaces the hardcoded `manual` startup mode, so new sessions start in your preferred mode without an interactive `/mode` call. A session with a recorded `/mode` history still restores the last used mode; `defaultMode` is the starting point for fresh sessions.
 
 ### TUI
@@ -164,7 +165,7 @@ All tools are model-callable, all commands are slash commands with Tab completio
 | `/pause` | Freeze the agent at the next safe boundary (esc/enter/space/ctrl+c resumes) | `10-pause.ts` |
 | `/goal <objective>` | Set a goal | `40-goal.ts` |
 | `/plan` | Enter/manage plan mode | `20-plan.ts` |
-| `/mode` | Permission mode (auto/yolo/manual) | `30-permission.ts` |
+| `/mode` | Permission mode (auto/yolo/manual) + `timeout 5m\|off\|reset`, `status` | `30-permission.ts` |
 | `/todo` | Task plan with phase model; shortcuts: `start` `done` `drop` `export` `import` `copy` `edit` `toggle` | `60-todo.ts` |
 | `/todo toggle` | Expand/collapse the todo panel (replaces former `alt+t`) | `60-todo.ts` |
 | `/tui` | Hot-switch editor style/shimmer/timing | `70-tui.ts` |
